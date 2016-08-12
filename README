@@ -1,0 +1,35 @@
+synk
+====
+
+Synchronize a bunch of files between different hosts.
+
+* active/passive replication
+* daemon mode using inotify(1)
+* one-shot mode for cron(1)
+* spawn rsync(1) processes
+
+usage
+-----
+
+	# hostname
+	phobos.z3bra.org
+
+	# pg <<EOF > /etc/synk.conf
+	phobos.z3bra.org
+	apophis.z3bra.org
+	doom.z3bra.org
+	EOF
+
+	$ synk -v $HOME/file
+	phobos.z3bra.org:/home/z3bra/file	1464274181
+	apophis.z3bra.org:/home/z3bra/file	1464260388
+	doom.z3bra.org:/home/z3bra/file	1464273098
+	LATEST:	phobos.z3bra.org
+	synk: rsync -azEq --delete phobos.z3bra.org:/home/z3bra/file apophis.z3bra.org:/home/z3bra/file
+	synk: rsync -azEq --delete phobos.z3bra.org:/home/z3bra/file doom.z3bra.org:/home/z3bra/file
+
+	$ synk -v $HOME/file
+	phobos.z3bra.org:/home/z3bra/file	1464274181
+	apophis.z3bra.org:/home/z3bra/file	1464274181
+	doom.z3bra.org:/home/z3bra/file	1464274181
+	SYNKED!
