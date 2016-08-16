@@ -1,8 +1,6 @@
 <config.mk
 
-all:V: synk
-
-%: %.o
+synk: synk.o
 	$LD -o $target $prereq $LDFLAGS $LIBS
 
 %.o: %.c

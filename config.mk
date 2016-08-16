@@ -9,4 +9,4 @@ MANDIR = ${PREFIX}/man
 CPPFLAGS = -DVERSION=\"${VERSION}\"
 CFLAGS = ${CPPFLAGS} -Wall -Wextra -pedantic -g
 LDFLAGS =
-LIBS = -lpthread
+LIBS =
