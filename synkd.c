@@ -26,7 +26,7 @@ usage(char *name) {
 }
 
 void *
-handle_client(void *arg)
+handleclient(void *arg)
 {
 	int i = 0;
 	char path[PATH_MAX] = "", ts[32] = "";
@@ -59,34 +59,15 @@ handle_client(void *arg)
 }
 
 int
-loop(int sfd)
-{
-	int cfd;
-	socklen_t len;
-	struct sockaddr_in clt;
-	struct client_t *c = NULL;
-	pthread_t th;
-
-	for (;;) {
-		len = sizeof(clt);
-		if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-			perror("accept");
-			return 1;
-		}
-
-		c = malloc(sizeof(struct client_t));
-		c->fd = cfd;
-		c->in = clt.sin_addr;
-
-		pthread_create(&th, NULL, handle_client, &c);
-	}
-}
-
-int
 server(in_addr_t host, in_port_t port)
 {
 	int sfd;
+	int cfd;
+	socklen_t len;
+	struct sockaddr_in clt;
 	struct sockaddr_in srv;
+	struct client_t *c = NULL;
+	pthread_t th;
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -108,7 +89,20 @@ server(in_addr_t host, in_port_t port)
 		return 1;
 	}
 
-	return loop(sfd);
+	for (;;) {
+		len = sizeof(clt);
+		if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
+			perror("accept");
+			return 1;
+		}
+
+		c = malloc(sizeof(struct client_t));
+		c->fd = cfd;
+		c->in = clt.sin_addr;
+
+		pthread_create(&th, NULL, handleclient, &c);
+	}
+	return 0;
 }
 
 int
@@ -129,5 +123,5 @@ main(int argc, char *argv[])
 	
 	server(host, port);
 
-	return 0;
+	return 0; /* NOTREACHED */
 }
