@@ -1,6 +1,6 @@
 <config.mk
 
-all:V: synk synkd
+all:V: synk
 
 %: %.o
 	$LD -o $target $prereq $LDFLAGS $LIBS
@@ -9,7 +9,7 @@ all:V: synk synkd
 	$CC $CFLAGS -c $stem.c -o $stem.o
 
 clean:V:
-	rm -f *.o synk synkd
+	rm -f *.o synk
 
 install:V: all
 	mkdir -p ${DESTDIR}${PREFIX}/bin
