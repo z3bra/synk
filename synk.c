@@ -22,23 +22,12 @@ usage(char *name)
 }
 
 int
-main(int argc, char *argv[])
+client(in_addr_t host, in_port_t port, const char *fn)
 {
 	int cfd;
-	char *argv0;
 	size_t len = 0;
-	uint16_t port = SERVER_PORT;
-	uint32_t host = INADDR_LOOPBACK;
 	struct sockaddr_in clt;
-	char path[PATH_MAX] = "", ts[32] = "";
-
-	ARGBEGIN{
-	case 'h': host = atol(EARGF(usage(argv0))); break;
-	case 'p': port = atoi(EARGF(usage(argv0))); break;
-	}ARGEND;
-
-	if (argc < 2)
-		return 1;
+	char path[PATH_MAX] = "", ts[PATH_MAX] = "";
 	
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -55,17 +44,37 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	snprintf(path, PATH_MAX, "%s", argv[1]);
+	snprintf(path, PATH_MAX, "%s", fn);
 	len = strnlen(path, PATH_MAX);
-	if (send(cfd, path, len, 0) < 0) {
-		perror("send");
+	printf("%s: %s\n", inet_ntoa(clt.sin_addr), path);
+	if ((len = write(cfd, path, len)) < 0) {
+		perror("write");
 		return -1;
 	}
 
-	send(cfd, "\n", 1, 0);
-
-	recv(cfd, ts, 32, 0);
+	read(cfd, ts, PATH_MAX);
 	printf("%s: %s\n", path, ts);
 
+	close(cfd);
+
+	return 0;
+}
+
+int
+main(int argc, char *argv[])
+{
+	char *argv0;
+	in_port_t port = SERVER_PORT;
+	in_addr_t host = INADDR_LOOPBACK;
+
+	ARGBEGIN{
+	case 'h': host = inet_network(EARGF(usage(argv0))); break;
+	case 'p': port = atoi(EARGF(usage(argv0))); break;
+	}ARGEND;
+
+	if (argc < 1)
+		usage(argv0);
+
+	client(host, port, argv[0]);
 	return 0;
 }

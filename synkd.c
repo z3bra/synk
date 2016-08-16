@@ -29,29 +29,26 @@ void *
 handle_client(void *arg)
 {
 	int i = 0;
-	char buf, path[PATH_MAX] = "", ts[32] = "";
+	char path[PATH_MAX] = "", ts[32] = "";
 	size_t len = 0;
 	struct stat sb;
 	struct client_t *c = *(struct client_t **)arg;
 
 	printf("%s: connected\n", inet_ntoa(c->in));
-	while ((len = recv(c->fd, &buf, 1, 0)) > 0) {
+	while ((len = read(c->fd, &path, PATH_MAX)) > 0) {
 		if (i > PATH_MAX) {
 			printf("%s: filename too long (>%d)\n", inet_ntoa(c->in), PATH_MAX);
 			break;
 		}
 
-		if (buf == '\n' || buf == '\0') {
-			printf("%s: %s\n", inet_ntoa(c->in), path);
-			stat(path, &sb);
-			snprintf(ts, 32, "%lu", sb.st_mtim.tv_sec);
-			len = strnlen(ts, 32);
-			send(c->fd, ts, len, 0);
-			memset(path, 0, PATH_MAX);
-			i = 0;
-		} else {
-			path[i++] = buf;
-		}
+		path[len] = '\0';
+		printf("%s: %s\n", inet_ntoa(c->in), path);
+		stat(path, &sb);
+		snprintf(ts, 32, "%lu", sb.st_mtim.tv_sec);
+		len = strnlen(ts, 32);
+		write(c->fd, ts, len);
+		memset(path, 0, PATH_MAX);
+		i = 0;
 	}
 
 	close(c->fd);
@@ -86,20 +83,11 @@ loop(int sfd)
 }
 
 int
-main(int argc, char *argv[])
+server(in_addr_t host, in_port_t port)
 {
 	int sfd;
-	char *argv0;
-	uint16_t port = LISTEN_PORT;
-	uint32_t host = INADDR_LOOPBACK;
 	struct sockaddr_in srv;
 
-	ARGBEGIN{
-	case 'p':
-		port = atoi(EARGF(usage(argv0)));
-		break;
-	}ARGEND;
-	
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		return 1;
@@ -121,4 +109,25 @@ main(int argc, char *argv[])
 	}
 
 	return loop(sfd);
+}
+
+int
+main(int argc, char *argv[])
+{
+	char *argv0;
+	in_port_t port = LISTEN_PORT;
+	in_addr_t host = INADDR_LOOPBACK;
+
+	ARGBEGIN{
+	case 'h':
+		host = inet_network(EARGF(usage(argv0)));
+		break;
+	case 'p':
+		port = atoi(EARGF(usage(argv0)));
+		break;
+	}ARGEND;
+	
+	server(host, port);
+
+	return 0;
 }
