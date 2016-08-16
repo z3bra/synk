@@ -32,13 +32,20 @@ usage(char *name)
 	exit(1);
 }
 
+long
+gettimestamp(const char *path)
+{
+	struct stat sb;
+	stat(path, &sb);
+	return sb.st_mtim.tv_sec;
+}
+
 int
 handleclient(struct client_t *c)
 {
 	int i = 0;
 	char path[PATH_MAX] = "", ts[32] = "";
 	size_t len = 0;
-	struct stat sb;
 
 	printf("%s: connected\n", inet_ntoa(c->in));
 	while ((len = read(c->fd, &path, PATH_MAX)) > 0) {
@@ -49,8 +56,7 @@ handleclient(struct client_t *c)
 
 		path[len] = '\0';
 		printf("%s: %s\n", inet_ntoa(c->in), path);
-		stat(path, &sb);
-		snprintf(ts, 32, "%lu", sb.st_mtim.tv_sec);
+		snprintf(ts, 32, "%lu", gettimestamp(path));
 		len = strnlen(ts, 32);
 		write(c->fd, ts, len);
 		memset(path, 0, PATH_MAX);
@@ -114,6 +120,7 @@ int
 client(in_addr_t host, in_port_t port, const char *fn)
 {
 	int cfd;
+	long ltim, rtim;
 	ssize_t len = 0;
 	struct sockaddr_in clt;
 	char path[PATH_MAX] = "", ts[TIMESTAMP_MAX] = "";
@@ -144,7 +151,9 @@ client(in_addr_t host, in_port_t port, const char *fn)
 
 	/* ... which should return the timestamp of this file */
 	read(cfd, ts, TIMESTAMP_MAX);
-	printf("%s: %s\n", path, ts);
+	ltim = gettimestamp(path);
+	rtim = strtol(ts, NULL, 10);
+	printf("%s:%s L:%lu R:%lu\n", path, ltim==rtim?"SYNKED":"TOSYNK",ltim, rtim);
 
 	close(cfd);
 
