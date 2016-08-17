@@ -12,8 +12,10 @@
 
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
+
 #define TIMESTAMP_MAX  32
 #define CONNECTION_MAX 1
+
 
 struct client_t {
         int fd;
@@ -25,6 +27,13 @@ enum {
 	SYNK_SERVER
 };
 
+const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
+
+long gettimestamp(const char *path);
+int handleclient(int cfd, struct in_addr inet);
+int server(in_addr_t host, in_port_t port);
+int client(in_addr_t host, in_port_t port, const char *path);
+
 void
 usage(char *name)
 {
@@ -32,44 +41,57 @@ usage(char *name)
 	exit(1);
 }
 
+/*
+ * Returns the UNIX timestamp for the given file, or -1 in case stat(2)
+ * is in error.
+ */
 long
 gettimestamp(const char *path)
 {
 	struct stat sb;
-	stat(path, &sb);
+	if (stat(path, &sb) < 0) {
+		perror(path);
+		return -1;
+	}
+
 	return sb.st_mtim.tv_sec;
 }
 
+/*
+ * Read a path from a connected client, get the timestamp for this path and
+ * send it back to the client. Close connection afterward.
+ */
 int
-handleclient(struct client_t *c)
+handleclient(int cfd, struct in_addr inet)
 {
-	int i = 0;
-	char path[PATH_MAX] = "", ts[32] = "";
-	size_t len = 0;
+	char path[PATH_MAX] = "", ts[TIMESTAMP_MAX] = "";
+	ssize_t len = 0;
 
-	printf("%s: connected\n", inet_ntoa(c->in));
-	while ((len = read(c->fd, &path, PATH_MAX)) > 0) {
-		if (i > PATH_MAX) {
-			printf("%s: filename too long (>%d)\n", inet_ntoa(c->in), PATH_MAX);
-			break;
-		}
-
-		path[len] = '\0';
-		printf("%s: %s\n", inet_ntoa(c->in), path);
-		snprintf(ts, 32, "%lu", gettimestamp(path));
-		len = strnlen(ts, 32);
-		write(c->fd, ts, len);
-		memset(path, 0, PATH_MAX);
-		i = 0;
+	if ((len = read(cfd, &path, PATH_MAX)) < 0) {
+		perror(inet_ntoa(inet));
+		return -1;
 	}
 
-	close(c->fd);
-	len = 0;
-	printf("%s: disconnected\n", inet_ntoa(c->in));
+	path[len] = '\0';
+	printf("%s: %s\n", inet_ntoa(inet), path);
+
+	/* retrieve timestamp for received path.. */
+	snprintf(ts, TIMESTAMP_MAX, "%lu", gettimestamp(path));
+	len = strnlen(ts, TIMESTAMP_MAX);
+
+	/* .. and send it to the client */
+	write(cfd, ts, len);
+
+	close(cfd);
 
 	return 0;
 }
 
+/*
+ * Server part: bind on given address/port and wait for a client connection.
+ * Only one client is handled per server instance, and the server gets close
+ * at the end.
+ */
 int
 server(in_addr_t host, in_port_t port)
 {
@@ -78,7 +100,6 @@ server(in_addr_t host, in_port_t port)
 	socklen_t len;
 	struct sockaddr_in clt;
 	struct sockaddr_in srv;
-	struct client_t *c = NULL;
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -106,16 +127,18 @@ server(in_addr_t host, in_port_t port)
 		return 1;
 	}
 
-	c = malloc(sizeof(struct client_t));
-	c->fd = cfd;
-	c->in = clt.sin_addr;
+	handleclient(cfd, clt.sin_addr);
 
-	handleclient(c);
-	free(c);
+	close(sfd);
 
 	return 0;
 }
 
+/*
+ * Client part: connect to the given address/port and send the given path to
+ * the server. The server should return the timestamp for this file on the
+ * socket. Connection is terminated after receiving the timestamp
+ */
 int
 client(in_addr_t host, in_port_t port, const char *fn)
 {
