@@ -1,6 +1,6 @@
 <config.mk
 
-synk: synk.o
+synk: synk.o sha512.o
 	$LD -o $target $prereq $LDFLAGS $LIBS
 
 %.o: %.c
