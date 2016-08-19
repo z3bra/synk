@@ -81,6 +81,9 @@ UINT64_C(0x5fcb6fab3ad6faec), UINT64_C(0x6c44198c4a475817)
 #define Sigma1(x)       (S(x, 14) ^ S(x, 18) ^ S(x, 41))
 #define Gamma0(x)       (S(x, 1) ^ S(x, 8) ^ R(x, 7))
 #define Gamma1(x)       (S(x, 19) ^ S(x, 61) ^ R(x, 6))
+#ifndef MIN
+    #define MIN(x, y) ( ((x)<(y))?(x):(y) )
+#endif
 
 /* compress 1024-bits */
 static int  sha512_compress(sha512_state * md, unsigned char *buf)
@@ -133,7 +136,7 @@ static int  sha512_compress(sha512_state * md, unsigned char *buf)
 */
 int sha512_init(sha512_state * md)
 {
-    if (md != NULL) return 1;
+    if (md == NULL) return 1;
     md->curlen = 0;
     md->length = 0;
     md->state[0] = UINT64_C(0x6a09e667f3bcc908);
@@ -147,6 +150,47 @@ int sha512_init(sha512_state * md)
     return 0;
 }
 
+
+int sha512_process(sha512_state * md, const unsigned char *in, unsigned long inlen)
+{
+    size_t i;
+    size_t n;
+
+    int           err;
+    if (md == NULL) return 1;
+    if (in == NULL) return 1;
+    if (md->curlen > sizeof(md->buf)) {
+        return 1;
+    }
+
+    while (inlen > 0) {
+        if (md->curlen == 0 && inlen >= 128) {
+            if ((err = sha512_compress(md, (unsigned char *)in)) != 0) {
+               return err;
+            }
+            md->length += 128 * 8;
+            in             += 128;
+            inlen          -= 128;
+        } else {
+            n = MIN(inlen, (128 - md->curlen));
+            for (i = 0; i < n; i++) {
+                md->buf[i + md->curlen] = in[i];
+            }
+            md->curlen += n;
+            in             += n;
+            inlen          -= n;
+            if (md->curlen == 128) {
+                if ((err = sha512_compress(md, md->buf)) != 0) {
+                   return err;
+                }
+                md->length += 8*128;
+                md->curlen = 0;
+            }
+        }
+    }
+    return 0;
+}
+
 /**
    Terminate the hash to get the digest
    @param md  The hash state
@@ -157,8 +201,8 @@ int sha512_done(sha512_state * md, unsigned char *out)
 {
     int i;
 
-    if (md  != NULL) return 1;
-    if (out != NULL) return 1;
+    if (md  == NULL) return 1;
+    if (out == NULL) return 1;
 
     if (md->curlen >= sizeof(md->buf)) {
        return 1;
