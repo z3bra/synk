@@ -216,7 +216,9 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	ssize_t len = 0;
 	struct sockaddr_in clt;
 	char path[PATH_MAX] = "";
-	unsigned char hash[64] = "", rhash[64];
+	char buf[PATH_MAX + 64 + TIMESTAMP_MAX + 3] = "";
+	unsigned char hash[64], rhash[64];
+	char *fmt;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -236,7 +238,10 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	/* we first send a filename to the server ... */
 	snprintf(path, PATH_MAX, "%s", fn);
 	len = strnlen(path, PATH_MAX);
-	printf("%s: %s\n", inet_ntoa(clt.sin_addr), path);
+	sha512(f, hash);
+	fmt = sha512_format(hash);
+	snprintf(buf, PATH_MAX + 64 + TIMESTAMP_MAX + 3, "%s\t%s\t%lu", path, fmt, gettimestamp(fn));
+	printf("%s: %s\n", inet_ntoa(clt.sin_addr), buf);
 	if ((len = write(cfd, path, len)) < 0) {
 		perror("write");
 		return -1;
@@ -244,7 +249,6 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 
 	/* ... which should return the timestamp of this file */
 	read(cfd, rhash, 64);
-	sha512(f, hash);
 	printf("%s:%s\n", path, sha512_compare(hash, rhash)?"NOT SYNKED":"SYNKED");
 
 	close(cfd);
