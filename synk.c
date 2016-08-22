@@ -34,7 +34,7 @@ const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 long gettimestamp(const char *path);
 int handleclient(int cfd, struct in_addr inet);
 int server(in_addr_t host, in_port_t port);
-int client(in_addr_t host, in_port_t port, const char *path);
+int client(in_addr_t host, in_port_t port, FILE *f, const char *path);
 int sha512(FILE *stream, unsigned char *hash);
 int sha512_compare(unsigned char *h1, unsigned char *h2);
 
@@ -109,8 +109,10 @@ gettimestamp(const char *path)
 int
 handleclient(int cfd, struct in_addr inet)
 {
-	char path[PATH_MAX] = "", ts[TIMESTAMP_MAX] = "";
 	ssize_t len = 0;
+	char path[PATH_MAX] = "";
+	FILE *f = NULL;
+	unsigned char hash[64];
 
 	if ((len = read(cfd, &path, PATH_MAX)) < 0) {
 		perror(inet_ntoa(inet));
@@ -120,12 +122,14 @@ handleclient(int cfd, struct in_addr inet)
 	path[len] = '\0';
 	printf("%s: %s\n", inet_ntoa(inet), path);
 
-	/* retrieve timestamp for received path.. */
-	snprintf(ts, TIMESTAMP_MAX, "%lu", gettimestamp(path));
-	len = strnlen(ts, TIMESTAMP_MAX);
+	/* compute sha512 hash for the given file... */
+	if ((f = fopen(path, "r")) != NULL) {
+		sha512(f, hash);
+		fclose(f);
+	}
 
 	/* .. and send it to the client */
-	write(cfd, ts, len);
+	write(cfd, hash, 64);
 
 	close(cfd);
 
@@ -185,14 +189,14 @@ server(in_addr_t host, in_port_t port)
  * socket. Connection is terminated after receiving the timestamp
  */
 int
-client(in_addr_t host, in_port_t port, const char *fn)
+client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 {
 	int cfd;
-	long ltim, rtim;
 	ssize_t len = 0;
 	struct sockaddr_in clt;
-	char path[PATH_MAX] = "", ts[TIMESTAMP_MAX] = "";
-	
+	char path[PATH_MAX] = "";
+	unsigned char hash[64] = "", rhash[64];
+
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		return 1;
@@ -218,10 +222,9 @@ client(in_addr_t host, in_port_t port, const char *fn)
 	}
 
 	/* ... which should return the timestamp of this file */
-	read(cfd, ts, TIMESTAMP_MAX);
-	ltim = gettimestamp(path);
-	rtim = strtol(ts, NULL, 10);
-	printf("%s:%s L:%lu R:%lu\n", path, ltim==rtim?"SYNKED":"TOSYNK",ltim, rtim);
+	read(cfd, rhash, 64);
+	sha512(f, hash);
+	printf("%s:%s\n", path, sha512_compare(hash, rhash)?"NOT SYNKED":"SYNKED");
 
 	close(cfd);
 
@@ -231,7 +234,8 @@ client(in_addr_t host, in_port_t port, const char *fn)
 int
 main(int argc, char *argv[])
 {
-	char *argv0;
+	char *argv0, *fn;
+	FILE *f = NULL;
 	uint8_t mode = SYNK_CLIENT;
 	in_port_t port = SERVER_PORT;
 	in_addr_t host = INADDR_LOOPBACK;
@@ -242,16 +246,22 @@ main(int argc, char *argv[])
 	case 's': mode = SYNK_SERVER; break;
 	}ARGEND;
 
-	if (mode == SYNK_CLIENT && argc < 1)
+	if (mode == SYNK_CLIENT && argc == 0)
 		usage(argv0);
 
 	switch(mode) {
 	case SYNK_CLIENT:
-		client(host, port, argv[0]);
+		while ((fn = *(argv++)) != NULL) {
+			f = fopen(fn, "r");
+			if (f) {
+				client(host, port, f, fn);
+				fclose(f);
+			}
+		}
 		break;
 	case SYNK_SERVER:
 		server(host, port);
-		break; /* NOTREACHED */
+		break;
 	}
 	return 0;
 }
