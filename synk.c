@@ -36,6 +36,7 @@ int handleclient(int cfd, struct in_addr inet);
 int server(in_addr_t host, in_port_t port);
 int client(in_addr_t host, in_port_t port, const char *path);
 int sha512(FILE *stream, unsigned char *hash);
+int sha512_compare(unsigned char *h1, unsigned char *h2);
 
 void
 usage(char *name)
@@ -67,6 +68,22 @@ sha512(FILE *stream, unsigned char *hash)
 	}
 
 	return sha512_done(&md, hash);
+}
+
+/*
+ * Return 0 is two sha512 hashes match together, 1 otherwise.
+ * Hashes MUST be 64 byte long, and not NULL.
+ */
+int
+sha512_compare(unsigned char *h1, unsigned char *h2)
+{
+	int i;
+	for (i=0; i<64; i++) {
+		if (h1[i] != h2[i])
+			return 1;
+	}
+
+	return 0;
 }
 
 /*
