@@ -190,13 +190,15 @@ server(in_addr_t host, in_port_t port)
 	}
 
 	len = sizeof(clt);
-	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-		perror("accept");
-		return 1;
+	for (;;) {
+		if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
+			perror("accept");
+			return 1;
+		}
+
+		handleclient(cfd, clt.sin_addr);
+
 	}
-
-	handleclient(cfd, clt.sin_addr);
-
 	close(sfd);
 
 	return 0;
