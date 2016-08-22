@@ -10,6 +10,7 @@
 #include <sys/types.h>
 
 #include "arg.h"
+#include "sha512.h"
 
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
@@ -34,12 +35,38 @@ long gettimestamp(const char *path);
 int handleclient(int cfd, struct in_addr inet);
 int server(in_addr_t host, in_port_t port);
 int client(in_addr_t host, in_port_t port, const char *path);
+int sha512(FILE *stream, unsigned char *hash);
 
 void
 usage(char *name)
 {
 	fprintf(stderr, "usage: %s [-s] [-h HOST] [-p PORT] [FILE..]\n", name),
 	exit(1);
+}
+
+/*
+ * Generate sha512 hash from stream, and store it in hash, which must
+ * be able to store 64 bytes.
+ */
+int
+sha512(FILE *stream, unsigned char *hash)
+{
+	sha512_state md;
+	size_t len = 0;
+	unsigned char buf[128];
+
+	if (sha512_init(&md) != 0) {
+		perror("sha512_init");
+		return 1;
+	}
+
+	while ((len = fread(buf, 128, 1, stream)) > 0) {
+		if (sha512_process(&md, buf, len) != 0) {
+			return 1;
+		}
+	}
+
+	return sha512_done(&md, hash);
 }
 
 /*
