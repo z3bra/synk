@@ -15,13 +15,19 @@
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
 
-#define TIMESTAMP_MAX  32
+#define TIMESTAMP_MAX  19 /* length of LONG_MAX */
 #define CONNECTION_MAX 1
 
 
 struct client_t {
         int fd;
         struct in_addr in;
+};
+
+struct metadata_t {
+	char path[PATH_MAX];
+	unsigned char hash[64];
+	long mtime;
 };
 
 enum {
@@ -31,14 +37,14 @@ enum {
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
-void usage(char *name);
-int sha512(FILE *stream, unsigned char *hash);
-int sha512_compare(unsigned char *h1, unsigned char *h2);
+void  usage(char *name);
+int   sha512(FILE *stream, unsigned char *hash);
+int   sha512_compare(unsigned char *h1, unsigned char *h2);
 char *sha512_format(unsigned char *hash);
-long gettimestamp(const char *path);
-int handleclient(int cfd, struct in_addr inet);
-int server(in_addr_t host, in_port_t port);
-int client(in_addr_t host, in_port_t port, FILE *f, const char *path);
+long  gettimestamp(const char *path);
+int   handleclient(int cfd, struct in_addr inet);
+int   server(in_addr_t host, in_port_t port);
+int   client(in_addr_t host, in_port_t port, FILE *f, const char *path);
 
 void
 usage(char *name)
@@ -129,26 +135,30 @@ int
 handleclient(int cfd, struct in_addr inet)
 {
 	ssize_t len = 0;
-	char path[PATH_MAX] = "";
 	FILE *f = NULL;
-	unsigned char hash[64];
+	struct metadata_t local, remote;
 
-	if ((len = read(cfd, &path, PATH_MAX)) < 0) {
+	memset(&local, 0, sizeof(local));
+	memset(&remote, 0, sizeof(remote));
+
+	if ((len = read(cfd, &remote, sizeof(remote))) < 0) {
 		perror(inet_ntoa(inet));
 		return -1;
 	}
 
-	path[len] = '\0';
-	printf("%s: %s\n", inet_ntoa(inet), path);
+	strncpy(local.path, remote.path, PATH_MAX);
 
 	/* compute sha512 hash for the given file... */
-	if ((f = fopen(path, "r")) != NULL) {
-		sha512(f, hash);
+	if ((f = fopen(local.path, "r")) != NULL) {
+		sha512(f, local.hash);
 		fclose(f);
 	}
 
+	local.mtime = gettimestamp(local.path);
+
+	printf("%s: %s\t%s\t%lu\n", inet_ntoa(inet), local.path, sha512_format(local.hash), local.mtime);
 	/* .. and send it to the client */
-	write(cfd, hash, 64);
+	write(cfd, &local, sizeof(local));
 
 	close(cfd);
 
@@ -215,10 +225,10 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	int cfd;
 	ssize_t len = 0;
 	struct sockaddr_in clt;
-	char path[PATH_MAX] = "";
-	char buf[PATH_MAX + 64 + TIMESTAMP_MAX + 3] = "";
-	unsigned char hash[64], rhash[64];
-	char *fmt;
+	struct metadata_t local, remote;
+
+	memset(&local, 0, sizeof(local));
+	memset(&remote, 0, sizeof(remote));
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -235,21 +245,22 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 		return -1;
 	}
 
-	/* we first send a filename to the server ... */
-	snprintf(path, PATH_MAX, "%s", fn);
-	len = strnlen(path, PATH_MAX);
-	sha512(f, hash);
-	fmt = sha512_format(hash);
-	snprintf(buf, PATH_MAX + 64 + TIMESTAMP_MAX + 3, "%s\t%s\t%lu", path, fmt, gettimestamp(fn));
-	printf("%s: %s\n", inet_ntoa(clt.sin_addr), buf);
-	if ((len = write(cfd, path, len)) < 0) {
+	sha512(f, local.hash);
+	snprintf(local.path, PATH_MAX, "%s", fn);
+	local.mtime = gettimestamp(local.path);
+
+	if ((len = write(cfd, &local, sizeof(struct metadata_t))) < 0) {
 		perror("write");
 		return -1;
 	}
 
 	/* ... which should return the timestamp of this file */
-	read(cfd, rhash, 64);
-	printf("%s:%s\n", path, sha512_compare(hash, rhash)?"NOT SYNKED":"SYNKED");
+	if ((len = read(cfd, &remote, sizeof(struct metadata_t))) < 0) {
+		perror("write");
+		return -1;
+	}
+
+	printf("%s\t%s\n", local.path, sha512_compare(local.hash, remote.hash)?"NOT SYNKED":"SYNKED");
 
 	close(cfd);
 
