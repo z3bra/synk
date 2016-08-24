@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +22,7 @@
 
 struct client_t {
         int fd;
-        struct in_addr in;
+        struct in_addr inet;
 };
 
 struct metadata_t {
@@ -39,9 +40,9 @@ const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
 void  usage(char *name);
 long  gettimestamp(const char *path);
-int   handleclient(int cfd, struct in_addr inet);
-int   server(in_addr_t host, in_port_t port);
-int   client(in_addr_t host, in_port_t port, FILE *f, const char *path);
+void *handleclient(void *arg);
+int   server(in_addr_t, in_port_t);
+int   client(in_addr_t, in_port_t, FILE *, const char *path);
 
 void
 usage(char *name)
@@ -70,19 +71,20 @@ gettimestamp(const char *path)
  * Read a path from a connected client, get the timestamp for this path and
  * send it back to the client. Close connection afterward.
  */
-int
-handleclient(int cfd, struct in_addr inet)
+void *
+handleclient(void *arg)
 {
 	ssize_t len = 0;
 	FILE *f = NULL;
 	struct metadata_t local, remote;
+	struct client_t *c = (struct client_t *)arg;
 
 	memset(&local, 0, sizeof(local));
 	memset(&remote, 0, sizeof(remote));
 
-	if ((len = read(cfd, &remote, sizeof(remote))) < 0) {
-		perror(inet_ntoa(inet));
-		return -1;
+	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
+		perror(inet_ntoa(c->inet));
+		return NULL;
 	}
 
 	strncpy(local.path, remote.path, PATH_MAX);
@@ -95,13 +97,15 @@ handleclient(int cfd, struct in_addr inet)
 
 	local.mtime = gettimestamp(local.path);
 
-	printf("%s: %s\t%s\t%lu\n", inet_ntoa(inet), local.path, sha512_format(local.hash), local.mtime);
+	printf("%s: %s\t%s\t%lu\n", inet_ntoa(c->inet), local.path,
+	                            sha512_format(local.hash), local.mtime);
 	/* .. and send it to the client */
-	write(cfd, &local, sizeof(local));
+	write(c->fd, &local, sizeof(local));
+	close(c->fd);
 
-	close(cfd);
+	free(c);
 
-	return 0;
+	pthread_exit(NULL);
 }
 
 /*
@@ -115,8 +119,10 @@ server(in_addr_t host, in_port_t port)
 	int sfd;
 	int cfd;
 	socklen_t len;
+	pthread_t th;
 	struct sockaddr_in clt;
 	struct sockaddr_in srv;
+	struct client_t *c = NULL;
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -145,10 +151,14 @@ server(in_addr_t host, in_port_t port)
 			return 1;
 		}
 
-		handleclient(cfd, clt.sin_addr);
+		c = malloc(sizeof(struct client_t));
+		c->fd = cfd;
+		c->inet = clt.sin_addr;
 
+		pthread_create(&th, NULL, handleclient, c);
 	}
-	close(sfd);
+
+	close(sfd); /* NOTREACHED */
 
 	return 0;
 }
