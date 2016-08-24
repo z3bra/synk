@@ -38,9 +38,6 @@ enum {
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
 void  usage(char *name);
-int   sha512(FILE *stream, unsigned char *hash);
-int   sha512_compare(unsigned char *h1, unsigned char *h2);
-char *sha512_format(unsigned char *hash);
 long  gettimestamp(const char *path);
 int   handleclient(int cfd, struct in_addr inet);
 int   server(in_addr_t host, in_port_t port);
@@ -53,64 +50,6 @@ usage(char *name)
 	exit(1);
 }
 
-/*
- * Generate sha512 hash from stream, and store it in hash, which must
- * be able to store 64 bytes.
- */
-int
-sha512(FILE *stream, unsigned char *hash)
-{
-	sha512_state md;
-	size_t len = 0;
-	unsigned char buf[128];
-
-	if (sha512_init(&md) != 0) {
-		perror("sha512_init");
-		return 1;
-	}
-
-	while ((len = fread(buf, 128, 1, stream)) > 0) {
-		if (sha512_process(&md, buf, len) != 0) {
-			return 1;
-		}
-	}
-
-	return sha512_done(&md, hash);
-}
-
-/*
- * Return 0 is two sha512 hashes match together, 1 otherwise.
- * Hashes MUST be 64 byte long, and not NULL.
- */
-int
-sha512_compare(unsigned char *h1, unsigned char *h2)
-{
-	int i;
-	for (i=0; i<64; i++) {
-		if (h1[i] != h2[i])
-			return 1;
-	}
-
-	return 0;
-}
-
-/*
- * Format a sha512 hash (64 bits long) as an hexadecimal string (128 char)
- * A pointer to this char is statically allocated, so multiple calls to this
- * function will overwrite the converted value.
- */
-char *
-sha512_format(unsigned char *hash)
-{
-	int i;
-	static char fmt[128] = "";
-
-	for (i=0; i<64; i++) {
-		snprintf(fmt+i, 2, "%02x\n", hash[i]);
-	}
-
-	return fmt;
-}
 /*
  * Returns the UNIX timestamp for the given file, or -1 in case stat(2)
  * is in error.

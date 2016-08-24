@@ -245,6 +245,66 @@ int sha512_done(sha512_state * md, unsigned char *out)
     return 0;
 }
 
+/*
+ * Return 0 is two sha512 hashes match together, 1 otherwise.
+ * Hashes MUST be 64 byte long, and not NULL.
+ */
+int
+sha512_compare(unsigned char *h1, unsigned char *h2)
+{
+	int i;
+	for (i=0; i<64; i++) {
+		if (h1[i] != h2[i])
+			return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Format a sha512 hash (64 bits long) as an hexadecimal string (128 char)
+ * A pointer to this char is statically allocated, so multiple calls to this
+ * function will overwrite the converted value.
+ */
+char *
+sha512_format(unsigned char *hash)
+{
+	int i;
+	static char fmt[128] = "";
+
+	for (i=0; i<64; i++) {
+		snprintf(fmt+i, 2, "%02x\n", hash[i]);
+	}
+
+	return fmt;
+}
+
+/*
+ * Generate sha512 hash from stream, and store it in hash, which must
+ * be able to store 64 bytes.
+ */
+int
+sha512(FILE *stream, unsigned char *hash)
+{
+	sha512_state md;
+	size_t len = 0;
+	unsigned char buf[128];
+
+	if (sha512_init(&md) != 0) {
+		perror("sha512_init");
+		return 1;
+	}
+
+	while ((len = fread(buf, 128, 1, stream)) > 0) {
+		if (sha512_process(&md, buf, len) != 0) {
+			return 1;
+		}
+	}
+
+	return sha512_done(&md, hash);
+}
+
+
 /* $Source: /cvs/libtom/libtomcrypt/src/hashes/sha2/sha512.c,v $ */
 /* $Revision: 1.10 $ */
 /* $Date: 2007/05/12 14:25:28 $ */
