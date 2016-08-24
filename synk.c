@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -19,30 +20,40 @@
 #define TIMESTAMP_MAX  19 /* length of LONG_MAX */
 #define CONNECTION_MAX 1
 
-
+/* hold a socket connection, used to pass a connection to a thread */
 struct client_t {
         int fd;
         struct in_addr inet;
 };
 
+/* metadata informations about a file, to decide about the synkro state */
 struct metadata_t {
 	char path[PATH_MAX];
 	unsigned char hash[64];
 	long mtime;
 };
 
+/* singly-linked list for all the nodes that should be in synk */
+struct node_t {
+	struct metadata_t meta;
+	struct sockaddr_in peer;
+	SLIST_ENTRY(node_t) entries;
+};
+
+/* different operationnal mode for TCP connection */
 enum {
 	SYNK_CLIENT,
 	SYNK_SERVER
 };
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
+SLIST_HEAD(head_node_t, node_t) head;
 
 void  usage(char *name);
 long  gettimestamp(const char *path);
 void *handleclient(void *arg);
 int   server(in_addr_t, in_port_t);
-int   client(in_addr_t, in_port_t, FILE *, const char *path);
+int   client(struct metadata_t, struct node_t *);
 
 void
 usage(char *name)
@@ -97,8 +108,6 @@ handleclient(void *arg)
 
 	local.mtime = gettimestamp(local.path);
 
-	printf("%s: %s\t%s\t%lu\n", inet_ntoa(c->inet), local.path,
-	                            sha512_format(local.hash), local.mtime);
 	/* .. and send it to the client */
 	write(c->fd, &local, sizeof(local));
 	close(c->fd);
@@ -169,34 +178,20 @@ server(in_addr_t host, in_port_t port)
  * socket. Connection is terminated after receiving the timestamp
  */
 int
-client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
+client(struct metadata_t local, struct node_t *clt)
 {
 	int cfd;
 	ssize_t len = 0;
-	struct sockaddr_in clt;
-	struct metadata_t local, remote;
-
-	memset(&local, 0, sizeof(local));
-	memset(&remote, 0, sizeof(remote));
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
 		return 1;
 	}
 
-	memset(&clt, 0, sizeof(clt));
-	clt.sin_family        = AF_INET;
-	clt.sin_addr.s_addr   = htonl(host);
-	clt.sin_port          = htons(port);
-
-	if (connect(cfd, (struct sockaddr *)&clt, sizeof(clt)) < 0) {
-		perror(inet_ntoa(clt.sin_addr));
+	if (connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)) < 0) {
+		perror(inet_ntoa(clt->peer.sin_addr));
 		return -1;
 	}
-
-	sha512(f, local.hash);
-	snprintf(local.path, PATH_MAX, "%s", fn);
-	local.mtime = gettimestamp(local.path);
 
 	if ((len = write(cfd, &local, sizeof(struct metadata_t))) < 0) {
 		perror("write");
@@ -204,14 +199,55 @@ client(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	}
 
 	/* ... which should return the timestamp of this file */
-	if ((len = read(cfd, &remote, sizeof(struct metadata_t))) < 0) {
+	if ((len = read(cfd, &(clt->meta), sizeof(struct metadata_t))) < 0) {
 		perror("write");
 		return -1;
 	}
 
-	printf("%s\t%s\n", local.path, sha512_compare(local.hash, remote.hash)?"NOT SYNKED":"SYNKED");
+	if (sha512_compare(local.hash, clt->meta.hash) == 0) {
+		printf("%s\tSYNKED\n", local.path);
+	} else {
+		printf("%s\t%s\t%s\t%lu\n", inet_ntoa(clt->peer.sin_addr), clt->meta.path, sha512_format(clt->meta.hash), clt->meta.mtime);
+	}
 
-	close(cfd);
+	return close(cfd);
+}
+
+int
+synkronize(in_addr_t host, in_port_t port, FILE *f, const char *fn)
+{
+	int cfd;
+	struct metadata_t local;
+	struct node_t *tmp = NULL;
+
+	memset(&local, 0, sizeof(local));
+
+	sha512(f, local.hash);
+	snprintf(local.path, PATH_MAX, "%s", fn);
+	local.mtime = gettimestamp(local.path);
+	printf("localhost\t%s\t%s\t%lu\n", local.path, sha512_format(local.hash), local.mtime);
+
+	tmp = malloc(sizeof(struct node_t));
+
+	memset(&tmp->meta, 0, sizeof(struct metadata_t));
+	memset(&tmp->peer, 0, sizeof(struct sockaddr_in));
+
+	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		perror("socket");
+		return 1;
+	}
+
+	tmp->peer.sin_family        = AF_INET;
+	tmp->peer.sin_addr.s_addr   = htonl(host);
+	tmp->peer.sin_port          = htons(port);
+
+	SLIST_INIT(&head);
+	SLIST_INSERT_HEAD(&head, tmp, entries);
+
+	SLIST_FOREACH(tmp, &head, entries) {
+		client(local, tmp);
+		SLIST_REMOVE(&head, tmp, node_t, entries);
+	}
 
 	return 0;
 }
@@ -239,7 +275,7 @@ main(int argc, char *argv[])
 		while ((fn = *(argv++)) != NULL) {
 			f = fopen(fn, "r");
 			if (f) {
-				client(host, port, f, fn);
+				synkronize(host, port, f, fn);
 				fclose(f);
 			}
 		}
