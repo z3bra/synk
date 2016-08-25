@@ -46,14 +46,16 @@ enum {
 	SYNK_SERVER
 };
 
-void  usage(char *name);
-long  gettimestamp(const char *path);
+void usage(char *name);
+long gettimestamp(const char *path);
 void *handleclient(void *arg);
-int   server(in_addr_t, in_port_t);
-int   client(struct metadata_t, struct node_t *);
-int   synkronize(in_addr_t, in_port_t, FILE *, const char *fn);
+int server(in_addr_t, in_port_t);
+struct node_t *addpeer(in_addr_t, in_port_t);
+int getpeerinfo(struct metadata_t, struct node_t *);
+int synkronize(FILE *, const char *fn);
 
 SLIST_HEAD(head_node_t, node_t) head;
+
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
 void
@@ -174,6 +176,34 @@ server(in_addr_t host, in_port_t port)
 }
 
 /*
+ * Add a peer to the singly-linked list referencing peers.
+ * metadata structure will be zeroed for future use.
+ */
+struct node_t *
+addpeer(in_addr_t host, in_port_t port)
+{
+	int cfd = 0;
+	struct node_t *entry = NULL;
+
+	entry = malloc(sizeof(struct node_t));
+	memset(&entry->meta, 0, sizeof(struct metadata_t));
+	memset(&entry->peer, 0, sizeof(struct sockaddr_in));
+
+	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		perror("socket");
+		return NULL;
+	}
+
+	entry->peer.sin_family        = AF_INET;
+	entry->peer.sin_addr.s_addr   = htonl(host);
+	entry->peer.sin_port          = htons(port);
+
+	SLIST_INSERT_HEAD(&head, entry, entries);
+
+	return entry;
+}
+
+/*
  * Client part: connect to the given address/port and send the given path to
  * the server. The server should return the timestamp for this file on the
  * socket. Connection is terminated after receiving the timestamp
@@ -209,49 +239,32 @@ getpeerinfo(struct metadata_t local, struct node_t *clt)
 }
 
 int
-synkronize(in_addr_t host, in_port_t port, FILE *f, const char *fn)
+synkronize(FILE *f, const char *fn)
 {
-	int cfd;
+	int cmp = 0;
 	struct metadata_t local;
 	struct node_t *tmp = NULL;
 
+	/* retrieve local attributes for the given file */
 	memset(&local, 0, sizeof(local));
-
 	sha512(f, local.hash);
 	snprintf(local.path, PATH_MAX, "%s", fn);
 	local.mtime = gettimestamp(local.path);
-
-	tmp = malloc(sizeof(struct node_t));
-
-	memset(&tmp->meta, 0, sizeof(struct metadata_t));
-	memset(&tmp->peer, 0, sizeof(struct sockaddr_in));
-
-	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		perror("socket");
-		return 1;
-	}
-
-	tmp->peer.sin_family        = AF_INET;
-	tmp->peer.sin_addr.s_addr   = htonl(host);
-	tmp->peer.sin_port          = htons(port);
-
-	SLIST_INIT(&head);
-	SLIST_INSERT_HEAD(&head, tmp, entries);
 
 	printf("localhost\t%s\t%7s\t%lu\n", local.path, sha512_format(local.hash), local.mtime);
 
 	SLIST_FOREACH(tmp, &head, entries) {
 		getpeerinfo(local, tmp);
-		if (sha512_compare(local.hash, tmp->meta.hash) == 0) {
-			printf("%s\tSYNKED\n", local.path);
-		} else {
-			printf("%s\t%s\t%7s\t%lu\n", inet_ntoa(tmp->peer.sin_addr),
-			                            tmp->meta.path,
-			                            sha512_format(tmp->meta.hash),
-			                            tmp->meta.mtime);
-		}
+		cmp += sha512_compare(local.hash, tmp->meta.hash);
+		printf("%s\t%s\t%7s\t%lu\n", inet_ntoa(tmp->peer.sin_addr),
+		                            tmp->meta.path,
+		                            sha512_format(tmp->meta.hash),
+		                            tmp->meta.mtime);
 		SLIST_REMOVE(&head, tmp, node_t, entries);
 	}
+
+	if (cmp == 0)
+		printf("%s\tSYNKED\n", local.path);
 
 	return 0;
 }
@@ -265,8 +278,14 @@ main(int argc, char *argv[])
 	in_port_t port = SERVER_PORT;
 	in_addr_t host = INADDR_LOOPBACK;
 
+	SLIST_INIT(&head);
+
 	ARGBEGIN{
-	case 'h': host = inet_network(EARGF(usage(argv0))); break;
+	case 'h':
+		host = inet_network(EARGF(usage(argv0)));
+		if (mode == SYNK_CLIENT)
+			addpeer(host, port);
+		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
 	}ARGEND;
@@ -279,7 +298,7 @@ main(int argc, char *argv[])
 		while ((fn = *(argv++)) != NULL) {
 			f = fopen(fn, "r");
 			if (f) {
-				synkronize(host, port, f, fn);
+				synkronize(f, fn);
 				fclose(f);
 			}
 		}
