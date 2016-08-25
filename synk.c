@@ -46,14 +46,15 @@ enum {
 	SYNK_SERVER
 };
 
-const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
-SLIST_HEAD(head_node_t, node_t) head;
-
 void  usage(char *name);
 long  gettimestamp(const char *path);
 void *handleclient(void *arg);
 int   server(in_addr_t, in_port_t);
 int   client(struct metadata_t, struct node_t *);
+int   synkronize(in_addr_t, in_port_t, FILE *, const char *fn);
+
+SLIST_HEAD(head_node_t, node_t) head;
+const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
 void
 usage(char *name)
@@ -178,7 +179,7 @@ server(in_addr_t host, in_port_t port)
  * socket. Connection is terminated after receiving the timestamp
  */
 int
-client(struct metadata_t local, struct node_t *clt)
+getpeerinfo(struct metadata_t local, struct node_t *clt)
 {
 	int cfd;
 	ssize_t len = 0;
@@ -204,12 +205,6 @@ client(struct metadata_t local, struct node_t *clt)
 		return -1;
 	}
 
-	if (sha512_compare(local.hash, clt->meta.hash) == 0) {
-		printf("%s\tSYNKED\n", local.path);
-	} else {
-		printf("%s\t%s\t%s\t%lu\n", inet_ntoa(clt->peer.sin_addr), clt->meta.path, sha512_format(clt->meta.hash), clt->meta.mtime);
-	}
-
 	return close(cfd);
 }
 
@@ -225,7 +220,6 @@ synkronize(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	sha512(f, local.hash);
 	snprintf(local.path, PATH_MAX, "%s", fn);
 	local.mtime = gettimestamp(local.path);
-	printf("localhost\t%s\t%s\t%lu\n", local.path, sha512_format(local.hash), local.mtime);
 
 	tmp = malloc(sizeof(struct node_t));
 
@@ -244,8 +238,18 @@ synkronize(in_addr_t host, in_port_t port, FILE *f, const char *fn)
 	SLIST_INIT(&head);
 	SLIST_INSERT_HEAD(&head, tmp, entries);
 
+	printf("localhost\t%s\t%7s\t%lu\n", local.path, sha512_format(local.hash), local.mtime);
+
 	SLIST_FOREACH(tmp, &head, entries) {
-		client(local, tmp);
+		getpeerinfo(local, tmp);
+		if (sha512_compare(local.hash, tmp->meta.hash) == 0) {
+			printf("%s\tSYNKED\n", local.path);
+		} else {
+			printf("%s\t%s\t%7s\t%lu\n", inet_ntoa(tmp->peer.sin_addr),
+			                            tmp->meta.path,
+			                            sha512_format(tmp->meta.hash),
+			                            tmp->meta.mtime);
+		}
 		SLIST_REMOVE(&head, tmp, node_t, entries);
 	}
 
