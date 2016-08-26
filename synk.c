@@ -48,10 +48,11 @@ enum {
 
 void usage(char *name);
 long gettimestamp(const char *path);
+int  getpeerinfo(struct metadata_t, struct node_t *);
+struct node_t *addpeer(in_addr_t, in_port_t);
+int cleanpeers();
 void *handleclient(void *arg);
 int server(in_addr_t, in_port_t);
-struct node_t *addpeer(in_addr_t, in_port_t);
-int getpeerinfo(struct metadata_t, struct node_t *);
 int synkronize(FILE *, const char *fn);
 
 SLIST_HEAD(head_node_t, node_t) head;
@@ -203,6 +204,19 @@ addpeer(in_addr_t host, in_port_t port)
 	return entry;
 }
 
+int
+cleanpeers()
+{
+	struct node_t *tmp = NULL;
+	while (!SLIST_EMPTY(&head)) {
+		tmp = SLIST_FIRST(&head);
+		SLIST_REMOVE_HEAD(&head, entries);
+		free(tmp);
+	}
+
+	return 0;
+}
+
 /*
  * Client part: connect to the given address/port and send the given path to
  * the server. The server should return the timestamp for this file on the
@@ -265,6 +279,8 @@ synkronize(FILE *f, const char *fn)
 
 	if (cmp == 0)
 		printf("%s\tSYNKED\n", local.path);
+
+	cleanpeers();
 
 	return 0;
 }
