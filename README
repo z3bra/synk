@@ -8,6 +8,16 @@ Synchronize a bunch of files between different hosts.
 * uses timestamps for comparison
 * spawn rsync(1) processes
 
+ideas
+-----
+
+backend:
+
+* write() + read() ?
+* ssh + rsync
+* bittorrent (http://libbt.sourceforge.net)
+* tox (https://github.com/irungentoo/toxcore)
+
 usage
 -----
 
@@ -93,6 +103,14 @@ Either we do the same as we do locally, but prepending each command with `ssh $P
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file apophis.z3bra.org:file'
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file doom.z3bra.org:file'
 
+PROS:
+	* one process per peer
+	* only the calling process compare hashes
+CONS:
+	* many calls to `ssh`
+
+---> Best solution
+
 Or, we simply run a new `synk` process on the peer, so that he figure
 out that he has to sync the other peers (we still need to use `rsync(1)`
 for localhost, as we're unable to guess our external address):
@@ -114,3 +132,35 @@ The only *real* issue with this solution is that the logic to discover the
 newest file will have to run twice, once on the initial calling process
 (locally), and once on the newest peer. This shouldn't be a huge issue,
 but it's still bothering to do the same thing twice.
+
+PROS:
+	* easier to implement
+CONS:
+	* double the number of inter connections
+	* loosing connection with one remote kills all updates
+
+implementation
+--------------
+
+	struct peer_t = {
+		socket;
+		metadata;
+		struct peer_t *next;
+	};
+
+	int
+	main(int argc, int *argv[])
+	{
+		SLIST_HEAD(headpeer_t, peer_t) peerlist;
+		SLIST_INIT(&peerlist);
+		peerlist = getpeerinfos(filename);
+		if (!uptodate(filename, peerlist)) {
+			master = freshest(peerlist);
+			synk(master, NULL); /* synk localhost with master */
+			SLIST_FOREACH(peer_t, peerlist, tmp) {
+				if (tmp != master)
+					synk(master, tmp);
+			}
+		}
+		return 0;
+	}
