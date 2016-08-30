@@ -58,6 +58,7 @@ struct peer_t *freshestpeer(struct peers_t *);
 int syncfile(struct peers_t *, const char *);
 int syncstatus(struct peers_t *);
 int flushpeers(struct peers_t *);
+int syncwithmaster(struct peer_t *master, struct peers_t *plist);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
@@ -321,6 +322,21 @@ freshestpeer(struct peers_t *plist)
 	return freshest;
 }
 
+/*
+ * Logic to synchronize a remote peer with all the slaves if they differ
+ */
+int
+syncwithmaster(struct peer_t *master, struct peers_t *plist)
+{
+	struct peer_t *slave = NULL;
+	SLIST_FOREACH(slave, plist, entries) {
+		if (slave == master)
+			continue;
+		if (!sha512_compare(master->meta.hash, slave->meta.hash))
+			continue;
+
+		/* SYNC COMMAND */
+	}
 	return 0;
 }
 
