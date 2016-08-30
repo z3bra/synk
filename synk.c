@@ -39,6 +39,7 @@ struct peer_t {
 	struct sockaddr_in peer;
 	SLIST_ENTRY(peer_t) entries;
 };
+SLIST_HEAD(peers_t, peer_t);
 
 /* different operationnal mode for TCP connection */
 enum {
@@ -47,15 +48,14 @@ enum {
 };
 
 void usage(char *name);
-long gettimestamp(const char *path);
-int  getpeerinfo(struct metadata_t, struct peer_t *);
-struct peer_t *addpeer(in_addr_t, in_port_t);
-int flushpeers();
 void *sendmetadata(void *arg);
 int serverloop(in_addr_t, in_port_t);
-int synkronize(FILE *, const char *fn);
 
-SLIST_HEAD(head_peer_t, peer_t) head;
+struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
+long gettimestamp(const char *path);
+int getpeermeta(struct peer_t *, struct metadata_t);
+int syncfile(struct peers_t *, const char *);
+int flushpeers(struct peers_t *);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
@@ -181,7 +181,7 @@ serverloop(in_addr_t host, in_port_t port)
  * metadata structure will be zeroed for future use.
  */
 struct peer_t *
-addpeer(in_addr_t host, in_port_t port)
+addpeer(struct peers_t *plist, in_addr_t host, in_port_t port)
 {
 	int cfd = 0;
 	struct peer_t *entry = NULL;
@@ -199,18 +199,21 @@ addpeer(in_addr_t host, in_port_t port)
 	entry->peer.sin_addr.s_addr   = htonl(host);
 	entry->peer.sin_port          = htons(port);
 
-	SLIST_INSERT_HEAD(&head, entry, entries);
+	SLIST_INSERT_HEAD(plist, entry, entries);
 
 	return entry;
 }
 
+/*
+ * Empty the linked-list containing all peers
+ */
 int
-flushpeers()
+flushpeers(struct peers_t *plist)
 {
 	struct peer_t *tmp = NULL;
-	while (!SLIST_EMPTY(&head)) {
-		tmp = SLIST_FIRST(&head);
-		SLIST_REMOVE_HEAD(&head, entries);
+	while (!SLIST_EMPTY(plist)) {
+		tmp = SLIST_FIRST(plist);
+		SLIST_REMOVE_HEAD(plist, entries);
 		free(tmp);
 	}
 
@@ -223,14 +226,14 @@ flushpeers()
  * socket. Connection is terminated after receiving the timestamp
  */
 int
-getpeerinfo(struct metadata_t local, struct peer_t *clt)
+getpeermeta(struct peer_t *clt, struct metadata_t local)
 {
 	int cfd;
 	ssize_t len = 0;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
-		return 1;
+		return -1;
 	}
 
 	if (connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)) < 0) {
@@ -253,34 +256,13 @@ getpeerinfo(struct metadata_t local, struct peer_t *clt)
 }
 
 int
-synkronize(FILE *f, const char *fn)
 {
-	int cmp = 0;
-	struct metadata_t local;
-	struct peer_t *tmp = NULL;
 
-	/* retrieve local attributes for the given file */
-	memset(&local, 0, sizeof(local));
-	sha512(f, local.hash);
-	snprintf(local.path, PATH_MAX, "%s", fn);
-	local.mtime = gettimestamp(local.path);
 
-	printf("localhost\t%s\t%7s\t%lu\n", local.path, sha512_format(local.hash), local.mtime);
 
-	SLIST_FOREACH(tmp, &head, entries) {
-		getpeerinfo(local, tmp);
-		cmp += sha512_compare(local.hash, tmp->meta.hash);
-		printf("%s\t%s\t%7s\t%lu\n", inet_ntoa(tmp->peer.sin_addr),
-		                            tmp->meta.path,
-		                            sha512_format(tmp->meta.hash),
-		                            tmp->meta.mtime);
-		SLIST_REMOVE(&head, tmp, peer_t, entries);
 	}
 
-	if (cmp == 0)
-		printf("%s\tSYNKED\n", local.path);
 
-	flushpeers();
 
 	return 0;
 }
@@ -289,34 +271,26 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
-	FILE *f = NULL;
 	uint8_t mode = SYNK_CLIENT;
 	in_port_t port = SERVER_PORT;
 	in_addr_t host = INADDR_LOOPBACK;
+	struct peers_t plist;
 
-	SLIST_INIT(&head);
+	SLIST_INIT(&plist);
 
 	ARGBEGIN{
 	case 'h':
 		host = inet_network(EARGF(usage(argv0)));
 		if (mode == SYNK_CLIENT)
-			addpeer(host, port);
+			addpeer(&plist, host, port);
 		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
 	}ARGEND;
 
-	if (mode == SYNK_CLIENT && argc == 0)
-		usage(argv0);
-
 	switch(mode) {
 	case SYNK_CLIENT:
 		while ((fn = *(argv++)) != NULL) {
-			f = fopen(fn, "r");
-			if (f) {
-				synkronize(f, fn);
-				fclose(f);
-			}
 		}
 		break;
 	case SYNK_SERVER:
