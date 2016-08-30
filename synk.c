@@ -54,6 +54,7 @@ int serverloop(in_addr_t, in_port_t);
 struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
 long gettimestamp(const char *path);
 int getpeermeta(struct peer_t *, struct metadata_t);
+struct peer_t *freshestpeer(struct peers_t *);
 int syncfile(struct peers_t *, const char *);
 int flushpeers(struct peers_t *);
 
@@ -274,10 +275,28 @@ getmetadata(struct metadata_t *meta, const char *fn)
 	return 0;
 }
 
+/*
+ * return a pointer to the peer having the highest timestamp.
+ * NULL is returned in case the local file is the most recent
+ */
+struct peer_t *
+freshestpeer(struct peers_t *plist)
+{
+	long ts = -1;
+	struct peer_t *tmp = NULL;
+	struct peer_t *freshest = NULL;
 
+	SLIST_FOREACH(tmp, plist, entries) {
+		if (tmp->meta.mtime > ts) {
+			freshest = tmp;
+			ts = tmp->meta.mtime;
+		}
 	}
 
+	printf("LATEST: %s\n", inet_ntoa(freshest->peer.sin_addr));
 
+	return freshest;
+}
 
 	return 0;
 }
