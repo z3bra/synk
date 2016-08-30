@@ -51,6 +51,8 @@ void usage(char *name);
 void *sendmetadata(void *arg);
 int serverloop(in_addr_t, in_port_t);
 
+char *echo(char * []);
+
 struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
 long gettimestamp(const char *path);
 int getpeermeta(struct peer_t *, struct metadata_t *);
@@ -67,6 +69,30 @@ usage(char *name)
 {
 	fprintf(stderr, "usage: %s [-s] [-h HOST] [-p PORT] [FILE..]\n", name),
 	exit(1);
+}
+
+/*
+ * Same as the echo(1) command as defined by POSIX. Takes a like of arguments
+ * and return a string containing all args separated by white spaces.
+ */
+char *
+echo(char *args[])
+{
+	size_t len = 0;
+	char *str = NULL;
+	char **p;
+
+	str = malloc(_POSIX_ARG_MAX);
+	memset(str, 0, _POSIX_ARG_MAX);
+
+	for (p = args; *p || len > _POSIX_ARG_MAX; p++) {
+		snprintf(str + len, _POSIX_ARG_MAX, "%s ", *p);
+		len += strnlen(*p, _POSIX_ARG_MAX) + 1;
+	}
+
+	str[len-1] = 0;
+
+	return str;
 }
 
 /*
