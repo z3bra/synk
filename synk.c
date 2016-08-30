@@ -56,6 +56,7 @@ long gettimestamp(const char *path);
 int getpeermeta(struct peer_t *, struct metadata_t);
 struct peer_t *freshestpeer(struct peers_t *);
 int syncfile(struct peers_t *, const char *);
+int syncstatus(struct peers_t *);
 int flushpeers(struct peers_t *);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
@@ -219,6 +220,28 @@ flushpeers(struct peers_t *plist)
 	}
 
 	return 0;
+}
+
+/*
+ * Check the synchronisation status between all peers. If at least 2 hashes
+ * differ, it returns with a non-zero status.
+ */
+int
+syncstatus(struct peers_t *plist)
+{
+	struct peer_t *tmp = NULL;
+	unsigned char *hash = NULL;
+
+	SLIST_FOREACH(tmp, plist, entries) {
+		if (hash == NULL) {
+			hash = tmp->meta.hash;
+		} else {
+			if (!sha512_compare(hash, tmp->meta.hash))
+				return 1;
+		}
+	}
+
+	return 1;
 }
 
 /*
