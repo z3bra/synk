@@ -281,6 +281,10 @@ getpeermeta(struct peer_t *clt, struct metadata_t local)
 }
 
 
+/*
+ * Retrieve metadata about a filename and store it in the given pointer.
+ * The pointer must be already allocated
+ */
 int
 getmetadata(struct metadata_t *meta, const char *fn)
 {
