@@ -53,7 +53,7 @@ int serverloop(in_addr_t, in_port_t);
 
 struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
 long gettimestamp(const char *path);
-int getpeermeta(struct peer_t *, struct metadata_t);
+int getpeermeta(struct peer_t *, struct metadata_t *);
 struct peer_t *freshestpeer(struct peers_t *);
 int syncfile(struct peers_t *, const char *);
 int uptodate(struct peers_t *);
@@ -86,6 +86,35 @@ gettimestamp(const char *path)
 }
 
 /*
+ * Retrieve metadata about a filename and store it in the given pointer.
+ * The pointer must be already allocated
+ */
+struct metadata_t *
+getmetadata(const char *fn)
+{
+	FILE *f = NULL;
+	struct metadata_t *meta = NULL;
+
+	if ((meta = malloc(sizeof(struct metadata_t))) == NULL) {
+		perror("malloc");
+		return NULL;
+	}
+
+	if ((f = fopen(fn, "r")) == NULL) {
+		perror(fn);
+		return NULL;
+	}
+
+	sha512(f, meta->hash);
+	fclose(f);
+	snprintf(meta->path, PATH_MAX, "%s", fn);
+	meta->mtime = gettimestamp(meta->path);
+
+	return meta;
+}
+
+
+/*
  * Read a path from a connected client, get the timestamp for this path and
  * send it back to the client. Close connection afterward.
  */
@@ -93,11 +122,9 @@ void *
 sendmetadata(void *arg)
 {
 	ssize_t len = 0;
-	FILE *f = NULL;
-	struct metadata_t local, remote;
+	struct metadata_t *local, remote;
 	struct client_t *c = (struct client_t *)arg;
 
-	memset(&local, 0, sizeof(local));
 	memset(&remote, 0, sizeof(remote));
 
 	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
@@ -105,18 +132,10 @@ sendmetadata(void *arg)
 		return NULL;
 	}
 
-	strncpy(local.path, remote.path, PATH_MAX);
-
-	/* compute sha512 hash for the given file... */
-	if ((f = fopen(local.path, "r")) != NULL) {
-		sha512(f, local.hash);
-		fclose(f);
-	}
-
-	local.mtime = gettimestamp(local.path);
+	local = getmetadata(remote.path);
 
 	/* .. and send it to the client */
-	write(c->fd, &local, sizeof(local));
+	write(c->fd, local, sizeof(local));
 	close(c->fd);
 
 	free(c);
@@ -251,7 +270,7 @@ uptodate(struct peers_t *plist)
  * socket. Connection is terminated after receiving the timestamp
  */
 int
-getpeermeta(struct peer_t *clt, struct metadata_t local)
+getpeermeta(struct peer_t *clt, struct metadata_t *local)
 {
 	int cfd;
 	ssize_t len = 0;
@@ -266,7 +285,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t local)
 		return -1;
 	}
 
-	if ((len = write(cfd, &local, sizeof(struct metadata_t))) < 0) {
+	if ((len = write(cfd, local, sizeof(struct metadata_t))) < 0) {
 		perror("write");
 		return -1;
 	}
@@ -278,29 +297,6 @@ getpeermeta(struct peer_t *clt, struct metadata_t local)
 	}
 
 	return close(cfd);
-}
-
-
-/*
- * Retrieve metadata about a filename and store it in the given pointer.
- * The pointer must be already allocated
- */
-int
-getmetadata(struct metadata_t *meta, const char *fn)
-{
-	FILE *f = NULL;
-
-	if ((f = fopen(fn, "r")) == NULL) {
-		perror(fn);
-		return -1;
-	}
-
-	sha512(f, meta->hash);
-	fclose(f);
-	snprintf(meta->path, PATH_MAX, "%s", fn);
-	meta->mtime = gettimestamp(meta->path);
-
-	return 0;
 }
 
 /*
@@ -353,12 +349,14 @@ int
 syncfile(struct peers_t *plist, const char *fn)
 {
 	int ret = -1;
-	struct metadata_t local;
+	struct metadata_t *local;
 	struct peer_t *tmp    = NULL;
 	struct peer_t *master = NULL;
 
 	memset(&local, 0, sizeof(struct metadata_t));
-	if (getmetadata(&local, fn) != 0)
+	local = getmetadata(fn);
+
+	if (!local)
 		return -1;
 
 	SLIST_FOREACH(tmp, plist, entries) {
@@ -371,13 +369,14 @@ syncfile(struct peers_t *plist, const char *fn)
 	addpeer(plist, INADDR_LOOPBACK, 0);
 	tmp = SLIST_FIRST(plist);
 
-	tmp->meta = local;
+	tmp->meta = *local;
 	if (!uptodate(plist)) {
 		master = freshestpeer(plist);
 		ret = syncwithmaster(master, plist);
 	}
 
 	flushpeers(plist);
+	free(local);
 
 	return ret;
 }
