@@ -317,8 +317,6 @@ freshestpeer(struct peers_t *plist)
 		}
 	}
 
-	printf("LATEST: %s\n", inet_ntoa(freshest->peer.sin_addr));
-
 	return freshest;
 }
 
