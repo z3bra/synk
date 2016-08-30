@@ -340,6 +340,44 @@ syncwithmaster(struct peer_t *master, struct peers_t *plist)
 	return 0;
 }
 
+
+/*
+ * Check the synchronisation state of a file between mutliple peers, and
+ * synchronise them if they differ
+ */
+int
+syncfile(struct peers_t *plist, const char *fn)
+{
+	int ret = -1;
+	struct metadata_t local;
+	struct peer_t *tmp    = NULL;
+	struct peer_t *master = NULL;
+
+	memset(&local, 0, sizeof(struct metadata_t));
+	if (getmetadata(&local, fn) != 0)
+		return -1;
+
+	SLIST_FOREACH(tmp, plist, entries) {
+		if (getpeermeta(tmp, local) != 0) {
+			printf("%s: couldn't retrieve metadata\n", inet_ntoa(tmp->peer.sin_addr));
+			return -1;
+		}
+	}
+
+	addpeer(plist, INADDR_LOOPBACK, 0);
+	tmp = SLIST_FIRST(plist);
+
+	tmp->meta = local;
+	if (syncstatus(plist) != 0) {
+		master = freshestpeer(plist);
+		ret = syncwithmaster(master, plist);
+	}
+
+	flushpeers(plist);
+
+	return ret;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -364,6 +402,7 @@ main(int argc, char *argv[])
 	switch(mode) {
 	case SYNK_CLIENT:
 		while ((fn = *(argv++)) != NULL) {
+			syncfile(&plist, fn);
 		}
 		break;
 	case SYNK_SERVER:
