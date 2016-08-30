@@ -56,7 +56,7 @@ long gettimestamp(const char *path);
 int getpeermeta(struct peer_t *, struct metadata_t);
 struct peer_t *freshestpeer(struct peers_t *);
 int syncfile(struct peers_t *, const char *);
-int syncstatus(struct peers_t *);
+int uptodate(struct peers_t *);
 int flushpeers(struct peers_t *);
 int syncwithmaster(struct peer_t *master, struct peers_t *plist);
 
@@ -228,7 +228,7 @@ flushpeers(struct peers_t *plist)
  * differ, it returns with a non-zero status.
  */
 int
-syncstatus(struct peers_t *plist)
+uptodate(struct peers_t *plist)
 {
 	struct peer_t *tmp = NULL;
 	unsigned char *hash = NULL;
@@ -238,7 +238,7 @@ syncstatus(struct peers_t *plist)
 			hash = tmp->meta.hash;
 		} else {
 			if (!sha512_compare(hash, tmp->meta.hash))
-				return 1;
+				return 0;
 		}
 	}
 
@@ -368,7 +368,7 @@ syncfile(struct peers_t *plist, const char *fn)
 	tmp = SLIST_FIRST(plist);
 
 	tmp->meta = local;
-	if (syncstatus(plist) != 0) {
+	if (!uptodate(plist)) {
 		master = freshestpeer(plist);
 		ret = syncwithmaster(master, plist);
 	}
