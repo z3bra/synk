@@ -255,9 +255,24 @@ getpeermeta(struct peer_t *clt, struct metadata_t local)
 	return close(cfd);
 }
 
-int
-{
 
+int
+getmetadata(struct metadata_t *meta, const char *fn)
+{
+	FILE *f = NULL;
+
+	if ((f = fopen(fn, "r")) == NULL) {
+		perror(fn);
+		return -1;
+	}
+
+	sha512(f, meta->hash);
+	fclose(f);
+	snprintf(meta->path, PATH_MAX, "%s", fn);
+	meta->mtime = gettimestamp(meta->path);
+
+	return 0;
+}
 
 
 	}
