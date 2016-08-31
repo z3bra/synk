@@ -1,5 +1,6 @@
 #include <limits.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,6 +53,7 @@ void *sendmetadata(void *arg);
 int serverloop(in_addr_t, in_port_t);
 
 char *echo(char * []);
+char **concat(int, ...);
 
 struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
 long gettimestamp(const char *path);
@@ -93,6 +95,42 @@ echo(char *args[])
 	str[len-1] = 0;
 
 	return str;
+}
+
+/*
+ * Take a variable number of arrays, and concatenate them in a single array.
+ * The first argument is the number of arrays passed
+ * All arrays should be NULL terminated, or undefined behavior may occur.
+ */
+char **
+concat(int n, ...)
+{
+	size_t i, len = 0;
+	va_list args;
+	char **p, **tmp, **cat = { NULL };
+
+	va_start(args, n);
+	while (n --> 0)	{
+		p = va_arg(args, char * []);
+
+		/* count args in the given array */
+		for (i=0; p[i]; ++i);
+
+		/* leave room for a trailing NULL arg if we're at the last array */
+		i += n ? 0 : 1;
+
+		cat = realloc(cat, (len + i) * sizeof(char *));
+		if (!cat) {
+			perror("realloc");
+			va_end(args);
+			return NULL;
+		}
+		memcpy(cat + len, p, i*sizeof(char *));
+		len += i;
+	}
+
+	va_end(args);
+	return cat;
 }
 
 /*
@@ -425,6 +463,7 @@ main(int argc, char *argv[])
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
 	}ARGEND;
+
 
 	switch(mode) {
 	case SYNK_CLIENT:
