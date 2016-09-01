@@ -332,16 +332,12 @@ flushpeers(struct peers_t *plist)
 int
 uptodate(struct peers_t *plist)
 {
-	struct peer_t *tmp = NULL;
-	unsigned char *hash = NULL;
+	struct peer_t *tmp, *ref;
 
+	ref = SLIST_FIRST(plist);
 	SLIST_FOREACH(tmp, plist, entries) {
-		if (hash == NULL) {
-			hash = tmp->meta.hash;
-		} else {
-			if (!sha512_compare(hash, tmp->meta.hash))
-				return 0;
-		}
+		if (!sha512_compare(ref->meta.hash, tmp->meta.hash))
+			return 0;
 	}
 
 	return 1;
