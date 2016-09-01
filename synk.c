@@ -449,7 +449,7 @@ dosync(struct peer_t *master, struct peer_t *slave)
 int
 syncfile(struct peers_t *plist, const char *fn)
 {
-	int ret = -1;
+	int ret = 0;
 	struct metadata_t *local;
 	struct peer_t *tmp    = NULL;
 	struct peer_t *master = NULL;
