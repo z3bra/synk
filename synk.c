@@ -15,6 +15,8 @@
 #include "arg.h"
 #include "sha512.h"
 
+#define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
 
@@ -66,6 +68,7 @@ int syncwithmaster(struct peer_t *master, struct peers_t *plist);
 int dosync(struct peer_t *master, struct peer_t *slave);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
+const char *ssh_cmd[] = { "ssh", NULL };
 
 void
 usage(char *name)
@@ -413,19 +416,24 @@ dosync(struct peer_t *master, struct peer_t *slave)
 {
 	char **cmd = NULL;
 	char *args[] = { NULL, NULL, NULL };
-	char local[_POSIX_ARG_MAX], remote[_POSIX_ARG_MAX];
+	char source[_POSIX_ARG_MAX] = "";
+	char destination[_POSIX_ARG_MAX] = "";
 
-	snprintf(local,  _POSIX_ARG_MAX, "%s", master->meta.path);
-	snprintf(remote, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(slave->peer.sin_addr),
-                                                  slave->meta.path);
+	if (IS_LOOPBACK(slave)) {
+		snprintf(source, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(master->peer.sin_addr), slave->meta.path);
+		snprintf(destination, _POSIX_ARG_MAX, "%s", master->meta.path);
+	} else {
+		snprintf(source, _POSIX_ARG_MAX, "%s", master->meta.path);
+		snprintf(destination, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(slave->peer.sin_addr), slave->meta.path);
+	}
 
-	args[0] = local;
-	args[1] = remote;
+	args[0] = source;
+	args[1] = destination;
 
 	cmd = concat(2, rsync_cmd, args);
 
-	if (master->peer.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
-		cmd = concat(1, (char *[]){ "ssh", inet_ntoa(master->peer.sin_addr), echo(cmd), NULL });
+	if (!IS_LOOPBACK(master) && !IS_LOOPBACK(slave)) {
+		cmd = concat(2, ssh_cmd, (char *[]){ inet_ntoa(master->peer.sin_addr), echo(cmd), NULL });
 	}
 
 	puts(echo(cmd));
