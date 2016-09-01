@@ -172,10 +172,12 @@ getmetadata(const char *fn)
 		return NULL;
 	}
 
+	memset(meta, 0, sizeof(struct metadata_t));
 	sha512(f, meta->hash);
-	fclose(f);
 	snprintf(meta->path, PATH_MAX, "%s", fn);
 	meta->mtime = gettimestamp(meta->path);
+
+	fclose(f);
 
 	return meta;
 }
@@ -196,13 +198,13 @@ sendmetadata(void *arg)
 
 	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
 		perror(inet_ntoa(c->inet));
-		return NULL;
+		pthread_exit(NULL);
 	}
 
 	local = getmetadata(remote.path);
 
 	/* .. and send it to the client */
-	write(c->fd, local, sizeof(local));
+	write(c->fd, local, sizeof(struct metadata_t));
 	close(c->fd);
 
 	free(c);
@@ -228,7 +230,7 @@ serverloop(in_addr_t host, in_port_t port)
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
-		return 1;
+		return -1;
 	}
 
 	memset(&srv, 0, sizeof(srv));
@@ -238,19 +240,19 @@ serverloop(in_addr_t host, in_port_t port)
 
 	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
 		perror("bind");
-		return 1;
+		return -1;
 	}
 
 	if (listen(sfd, CONNECTION_MAX) < 0) {
 		perror("listen");
-		return 1;
+		return -1;
 	}
 
 	len = sizeof(clt);
 	for (;;) {
 		if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
 			perror("accept");
-			return 1;
+			return -1;
 		}
 
 		c = malloc(sizeof(struct client_t));
@@ -357,9 +359,9 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 		return -1;
 	}
 
-	/* ... which should return the timestamp of this file */
+	/* ... which should return the metadata for this file */
 	if ((len = read(cfd, &(clt->meta), sizeof(struct metadata_t))) < 0) {
-		perror("write");
+		perror("read");
 		return -1;
 	}
 
@@ -401,7 +403,6 @@ syncwithmaster(struct peer_t *master, struct peers_t *plist)
 		if (!sha512_compare(master->meta.hash, slave->meta.hash))
 			continue;
 
-		/* SYNC COMMAND */
 		ret += dosync(master, slave);
 	}
 	return ret;
@@ -445,7 +446,6 @@ syncfile(struct peers_t *plist, const char *fn)
 	struct peer_t *tmp    = NULL;
 	struct peer_t *master = NULL;
 
-	memset(&local, 0, sizeof(struct metadata_t));
 	local = getmetadata(fn);
 
 	if (!local)
@@ -460,8 +460,8 @@ syncfile(struct peers_t *plist, const char *fn)
 
 	addpeer(plist, INADDR_LOOPBACK, 0);
 	tmp = SLIST_FIRST(plist);
-
 	tmp->meta = *local;
+
 	if (!uptodate(plist)) {
 		master = freshestpeer(plist);
 		ret = syncwithmaster(master, plist);
