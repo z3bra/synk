@@ -84,7 +84,7 @@ int verbose = LOG_NONE;
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-s] [-h HOST] [-p PORT] [FILE..]\n", name),
+	fprintf(stderr, "usage: %s [-vs] [-h HOST] [-p PORT] [FILE..]\n", name),
 	exit(1);
 }
 
@@ -520,6 +520,7 @@ main(int argc, char *argv[])
 		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
+	case 'v': verbose++; break;
 	}ARGEND;
 
 
