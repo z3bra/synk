@@ -16,6 +16,7 @@
 #include "sha512.h"
 
 #define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+#define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
 
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
@@ -50,6 +51,13 @@ enum {
 	SYNK_SERVER
 };
 
+enum {
+	LOG_NONE = 0,
+	LOG_INFO = 1,
+	LOG_VERBOSE = 2,
+	LOG_DEBUG = 3,
+};
+
 void usage(char *name);
 void *sendmetadata(void *arg);
 int serverloop(in_addr_t, in_port_t);
@@ -69,6 +77,8 @@ int dosync(struct peer_t *master, struct peer_t *slave);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
+
+int verbose = LOG_NONE;
 
 void
 usage(char *name)
