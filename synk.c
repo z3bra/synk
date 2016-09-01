@@ -23,6 +23,7 @@
 
 #define TIMESTAMP_MAX  19 /* length of LONG_MAX */
 #define CONNECTION_MAX 1
+#define RECVSIZ        512
 
 /* hold a socket connection, used to pass a connection to a thread */
 struct client_t {
@@ -355,7 +356,7 @@ int
 getpeermeta(struct peer_t *clt, struct metadata_t *local)
 {
 	int cfd;
-	ssize_t len = 0;
+	ssize_t r, len = 0;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -367,15 +368,19 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 		return -1;
 	}
 
-	if ((len = write(cfd, local, sizeof(struct metadata_t))) < 0) {
+	if (write(cfd, local, sizeof(struct metadata_t)) < 0) {
 		perror("write");
 		return -1;
 	}
 
 	/* ... which should return the metadata for this file */
-	if ((len = read(cfd, &(clt->meta), sizeof(struct metadata_t))) < 0) {
-		perror("read");
-		return -1;
+	len = 0;
+	while (len < (ssize_t)sizeof(struct metadata_t)) {
+		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RECVSIZ)) < 0) {
+			perror("read");
+			return -1;
+		}
+		len += r;
 	}
 
 	return close(cfd);
