@@ -116,15 +116,17 @@ concat(int n, ...)
 		/* count args in the given array */
 		for (i=0; p[i]; ++i);
 
-		/* leave room for a trailing NULL arg if we're at the last array */
+		/* Leave room for a NULL arg at the end */
 		i += n ? 0 : 1;
 
-		cat = realloc(cat, (len + i) * sizeof(char *));
-		if (!cat) {
+		tmp = realloc(cat, (len + i) * sizeof(char *));
+		if (!tmp) {
 			perror("realloc");
+			free(cat);
 			va_end(args);
 			return NULL;
 		}
+		cat = tmp;
 		memcpy(cat + len, p, i*sizeof(char *));
 		len += i;
 	}
