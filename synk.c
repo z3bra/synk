@@ -63,6 +63,7 @@ int syncfile(struct peers_t *, const char *);
 int uptodate(struct peers_t *);
 int flushpeers(struct peers_t *);
 int syncwithmaster(struct peer_t *master, struct peers_t *plist);
+int dosync(struct peer_t *master, struct peer_t *slave);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 
@@ -392,6 +393,7 @@ freshestpeer(struct peers_t *plist)
 int
 syncwithmaster(struct peer_t *master, struct peers_t *plist)
 {
+	int ret = 0;
 	struct peer_t *slave = NULL;
 	SLIST_FOREACH(slave, plist, entries) {
 		if (slave == master)
@@ -400,10 +402,36 @@ syncwithmaster(struct peer_t *master, struct peers_t *plist)
 			continue;
 
 		/* SYNC COMMAND */
+		ret += dosync(master, slave);
 	}
-	return 0;
+	return ret;
 }
 
+int
+dosync(struct peer_t *master, struct peer_t *slave)
+{
+	char **cmd = NULL;
+	char *args[] = { NULL, NULL, NULL };
+	char local[_POSIX_ARG_MAX], remote[_POSIX_ARG_MAX];
+
+	snprintf(local,  _POSIX_ARG_MAX, "%s", master->meta.path);
+	snprintf(remote, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(slave->peer.sin_addr),
+                                                  slave->meta.path);
+
+	args[0] = local;
+	args[1] = remote;
+
+	cmd = concat(2, rsync_cmd, args);
+
+	if (master->peer.sin_addr.s_addr != htonl(INADDR_LOOPBACK)) {
+		cmd = concat(1, (char *[]){ "ssh", inet_ntoa(master->peer.sin_addr), echo(cmd), NULL });
+	}
+
+	puts(echo(cmd));
+	free(cmd);
+
+	return 0;
+}
 
 /*
  * Check the synchronisation state of a file between mutliple peers, and
