@@ -420,11 +420,15 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	char destination[_POSIX_ARG_MAX] = "";
 
 	if (IS_LOOPBACK(slave)) {
-		snprintf(source, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(master->peer.sin_addr), slave->meta.path);
 		snprintf(destination, _POSIX_ARG_MAX, "%s", master->meta.path);
+		snprintf(source, _POSIX_ARG_MAX, "%s:%s",
+			inet_ntoa(master->peer.sin_addr),
+			slave->meta.path);
 	} else {
 		snprintf(source, _POSIX_ARG_MAX, "%s", master->meta.path);
-		snprintf(destination, _POSIX_ARG_MAX, "%s:%s", inet_ntoa(slave->peer.sin_addr), slave->meta.path);
+		snprintf(destination, _POSIX_ARG_MAX, "%s:%s",
+			inet_ntoa(slave->peer.sin_addr),
+			slave->meta.path);
 	}
 
 	args[0] = source;
@@ -433,7 +437,8 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	cmd = concat(2, rsync_cmd, args);
 
 	if (!IS_LOOPBACK(master) && !IS_LOOPBACK(slave)) {
-		cmd = concat(2, ssh_cmd, (char *[]){ inet_ntoa(master->peer.sin_addr), echo(cmd), NULL });
+		cmd = concat(2, ssh_cmd, (char *[]){
+			inet_ntoa(master->peer.sin_addr),echo(cmd), NULL });
 	}
 
 	puts(echo(cmd));
