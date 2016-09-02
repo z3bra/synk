@@ -77,6 +77,7 @@ int uptodate(struct peers_t *);
 int flushpeers(struct peers_t *);
 int syncwithmaster(struct peer_t *master, struct peers_t *plist);
 int dosync(struct peer_t *master, struct peer_t *slave);
+int spawnremote(struct peers_t *);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
@@ -516,6 +517,28 @@ syncfile(struct peers_t *plist, const char *fn)
 }
 
 int
+spawnremote(struct peers_t *plist)
+{
+	char **cmd = NULL;
+	char synk_cmd[_POSIX_ARG_MAX];
+
+	struct peer_t *tmp;
+
+	SLIST_FOREACH(tmp, plist, entries) {
+		snprintf(synk_cmd, _POSIX_ARG_MAX, "/usr/local/bin/synk -s -h %s",
+			inet_ntoa(tmp->peer.sin_addr));
+		cmd = concat(2, ssh_cmd, (char *[]){ inet_ntoa(tmp->peer.sin_addr), synk_cmd, NULL });
+		if (!fork()) {
+			puts(echo(cmd));
+			execvp(cmd[0], cmd);
+			perror(cmd[0]);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
@@ -543,6 +566,8 @@ main(int argc, char *argv[])
 	switch(mode) {
 	case SYNK_CLIENT:
 		while ((fn = *(argv++)) != NULL) {
+			spawnremote(&plist);
+			sleep(1);
 			syncfile(&plist, fn);
 		}
 		break;
