@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/queue.h>
@@ -64,6 +65,7 @@ int serverloop(in_addr_t, in_port_t);
 
 char *echo(char * []);
 char **concat(int, ...);
+struct in_addr *resolve(char *);
 
 struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
 long gettimestamp(const char *path);
@@ -147,6 +149,24 @@ concat(int n, ...)
 
 	va_end(args);
 	return cat;
+}
+
+/*
+ * Put an hostname, get an in_addr!
+ * This is intended to be consumed directly, as gethostbyname() might
+ * return a pointer to a static buffer
+ */
+struct in_addr *
+resolve(char *hostname)
+{
+	struct hostent *he;
+	
+	if (!(he = gethostbyname(hostname))) {
+		herror(hostname);
+		return NULL;
+	}
+	
+	return ((struct in_addr **)he->h_addr_list)[0];
 }
 
 /*
