@@ -1,5 +1,4 @@
 #include <limits.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -60,7 +59,7 @@ enum {
 };
 
 void usage(char *name);
-void *sendmetadata(void *arg);
+int sendmetadata(struct client_t *);
 int serverloop(in_addr_t, in_port_t);
 
 char *echo(char * []);
@@ -201,18 +200,17 @@ getmetadata(const char *fn)
  * Read a path from a connected client, get the timestamp for this path and
  * send it back to the client. Close connection afterward.
  */
-void *
-sendmetadata(void *arg)
+int
+sendmetadata(struct client_t *c)
 {
 	ssize_t len = 0;
 	struct metadata_t *local, remote;
-	struct client_t *c = (struct client_t *)arg;
 
 	memset(&remote, 0, sizeof(remote));
 
 	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
 		perror(inet_ntoa(c->inet));
-		pthread_exit(NULL);
+		return -1;
 	}
 
 	local = getmetadata(remote.path);
@@ -223,7 +221,7 @@ sendmetadata(void *arg)
 
 	free(c);
 
-	pthread_exit(NULL);
+	return -1;
 }
 
 /*
@@ -237,7 +235,6 @@ serverloop(in_addr_t host, in_port_t port)
 	int sfd;
 	int cfd;
 	socklen_t len;
-	pthread_t th;
 	struct sockaddr_in clt;
 	struct sockaddr_in srv;
 	struct client_t *c = NULL;
@@ -263,22 +260,18 @@ serverloop(in_addr_t host, in_port_t port)
 	}
 
 	len = sizeof(clt);
-	for (;;) {
-		if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-			perror("accept");
-			return -1;
-		}
-
-		c = malloc(sizeof(struct client_t));
-		c->fd = cfd;
-		c->inet = clt.sin_addr;
-
-		pthread_create(&th, NULL, sendmetadata, c);
+	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
+		perror("accept");
+		return -1;
 	}
 
-	close(sfd); /* NOTREACHED */
+	c = malloc(sizeof(struct client_t));
+	c->fd = cfd;
+	c->inet = clt.sin_addr;
 
-	return 0;
+	sendmetadata(c);
+
+	return close(sfd);
 }
 
 /*
