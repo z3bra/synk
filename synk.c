@@ -40,6 +40,7 @@ struct metadata_t {
 
 /* singly-linked list for all the nodes that should be in synk */
 struct peer_t {
+	char host[HOST_NAME_MAX];
 	struct metadata_t meta;
 	struct sockaddr_in peer;
 	SLIST_ENTRY(peer_t) entries;
@@ -67,7 +68,7 @@ char *echo(char * []);
 char **concat(int, ...);
 struct in_addr *resolve(char *);
 
-struct peer_t *addpeer(struct peers_t *, in_addr_t, in_port_t);
+struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
 long gettimestamp(const char *path);
 int getpeermeta(struct peer_t *, struct metadata_t *);
 struct peer_t *freshestpeer(struct peers_t *);
@@ -299,10 +300,11 @@ serverloop(in_addr_t host, in_port_t port)
  * metadata structure will be zeroed for future use.
  */
 struct peer_t *
-addpeer(struct peers_t *plist, in_addr_t host, in_port_t port)
+addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 {
 	int cfd = 0;
 	struct peer_t *entry = NULL;
+	struct in_addr *host;
 
 	entry = malloc(sizeof(struct peer_t));
 	memset(&entry->meta, 0, sizeof(struct metadata_t));
@@ -313,8 +315,11 @@ addpeer(struct peers_t *plist, in_addr_t host, in_port_t port)
 		return NULL;
 	}
 
+	strncpy(entry->host, hostname, HOST_NAME_MAX);
+	host = resolve(hostname);
+
 	entry->peer.sin_family        = AF_INET;
-	entry->peer.sin_addr.s_addr   = htonl(host);
+	entry->peer.sin_addr.s_addr   = htonl(host->s_addr);
 	entry->peer.sin_port          = htons(port);
 
 	SLIST_INSERT_HEAD(plist, entry, entries);
@@ -495,7 +500,7 @@ syncfile(struct peers_t *plist, const char *fn)
 		}
 	}
 
-	addpeer(plist, INADDR_LOOPBACK, 0);
+	addpeer(plist, "localhost", 0);
 	tmp = SLIST_FIRST(plist);
 	tmp->meta = *local;
 
@@ -514,24 +519,26 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
-	uint8_t mode = SYNK_CLIENT;
+	char *hostname = NULL;
 	in_port_t port = SERVER_PORT;
-	in_addr_t host = INADDR_LOOPBACK;
+	uint8_t mode = SYNK_CLIENT;
 	struct peers_t plist;
 
 	SLIST_INIT(&plist);
 
 	ARGBEGIN{
 	case 'h':
-		host = inet_network(EARGF(usage(argv0)));
+		hostname = EARGF(usage(argv0));
 		if (mode == SYNK_CLIENT)
-			addpeer(&plist, host, port);
+			addpeer(&plist, hostname, port);
 		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
 	case 'v': verbose++; break;
 	}ARGEND;
 
+	if (hostname == NULL)
+		usage(argv0);
 
 	switch(mode) {
 	case SYNK_CLIENT:
@@ -540,7 +547,7 @@ main(int argc, char *argv[])
 		}
 		break;
 	case SYNK_SERVER:
-		serverloop(host, port);
+		serverloop(resolve(hostname)->s_addr, port);
 		break;
 	}
 	return 0;
