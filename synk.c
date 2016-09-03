@@ -24,6 +24,7 @@
 #define TIMESTAMP_MAX  19 /* length of LONG_MAX */
 #define CONNECTION_MAX 1
 #define RECVSIZ        512
+#define TIMEOUT        5
 
 /* hold a socket connection, used to pass a connection to a thread */
 struct client_t {
@@ -286,6 +287,8 @@ serverloop(in_addr_t host, in_port_t port)
 		perror("accept");
 		return -1;
 	}
+
+	alarm(0); /* cancel previously set SIGALRM */
 
 	c = malloc(sizeof(struct client_t));
 	c->fd = cfd;
@@ -566,6 +569,7 @@ main(int argc, char *argv[])
 		}
 		break;
 	case SYNK_SERVER:
+		alarm(TIMEOUT);
 		serverloop(resolve(hostname)->s_addr, port);
 		break;
 	}
