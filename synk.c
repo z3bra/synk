@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include "arg.h"
 #include "sha512.h"
@@ -520,6 +521,8 @@ syncfile(struct peers_t *plist, const char *fn)
 
 	flushpeers(plist);
 	free(local);
+
+	wait(NULL);
 
 	return ret;
 }
