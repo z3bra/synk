@@ -320,7 +320,7 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 	host = resolve(hostname);
 
 	entry->peer.sin_family        = AF_INET;
-	entry->peer.sin_addr.s_addr   = htonl(host->s_addr);
+	entry->peer.sin_addr.s_addr   = host->s_addr;
 	entry->peer.sin_port          = htons(port);
 
 	SLIST_INSERT_HEAD(plist, entry, entries);
@@ -451,14 +451,10 @@ dosync(struct peer_t *master, struct peer_t *slave)
 
 	if (IS_LOOPBACK(slave)) {
 		snprintf(destination, _POSIX_ARG_MAX, "%s", master->meta.path);
-		snprintf(source, _POSIX_ARG_MAX, "%s:%s",
-			inet_ntoa(master->peer.sin_addr),
-			slave->meta.path);
+		snprintf(source, _POSIX_ARG_MAX, "%s:%s", master->host, slave->meta.path);
 	} else {
 		snprintf(source, _POSIX_ARG_MAX, "%s", master->meta.path);
-		snprintf(destination, _POSIX_ARG_MAX, "%s:%s",
-			inet_ntoa(slave->peer.sin_addr),
-			slave->meta.path);
+		snprintf(destination, _POSIX_ARG_MAX, "%s:%s", slave->host, slave->meta.path);
 	}
 
 	args[0] = source;
@@ -468,7 +464,7 @@ dosync(struct peer_t *master, struct peer_t *slave)
 
 	if (!IS_LOOPBACK(master) && !IS_LOOPBACK(slave)) {
 		cmd = concat(2, ssh_cmd, (char *[]){
-			inet_ntoa(master->peer.sin_addr),echo(cmd), NULL });
+			master->host, echo(cmd), NULL });
 	}
 
 	puts(echo(cmd));
@@ -495,10 +491,8 @@ syncfile(struct peers_t *plist, const char *fn)
 		return -1;
 
 	SLIST_FOREACH(tmp, plist, entries) {
-		if (getpeermeta(tmp, local) != 0) {
-			printf("%s: couldn't retrieve metadata\n", inet_ntoa(tmp->peer.sin_addr));
+		if (getpeermeta(tmp, local) != 0)
 			return -1;
-		}
 	}
 
 	addpeer(plist, "localhost", 0);
@@ -527,7 +521,7 @@ spawnremote(struct peers_t *plist)
 	SLIST_FOREACH(tmp, plist, entries) {
 		snprintf(synk_cmd, _POSIX_ARG_MAX, "/usr/local/bin/synk -s -h %s",
 			inet_ntoa(tmp->peer.sin_addr));
-		cmd = concat(2, ssh_cmd, (char *[]){ inet_ntoa(tmp->peer.sin_addr), synk_cmd, NULL });
+		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
 			puts(echo(cmd));
 			execvp(cmd[0], cmd);
