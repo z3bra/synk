@@ -142,7 +142,7 @@ concat(int n, ...)
 
 		tmp = realloc(cat, (len + i) * sizeof(char *));
 		if (!tmp) {
-			perror("realloc");
+			log(LOG_ERROR, "realloc: %s\n", strerror(errno));;
 			free(cat);
 			va_end(args);
 			return NULL;
@@ -183,7 +183,7 @@ gettimestamp(const char *path)
 {
 	struct stat sb;
 	if (stat(path, &sb) < 0) {
-		perror(path);
+		log(LOG_ERROR, "%s: %s\n", path, strerror(errno));;
 		return -1;
 	}
 
@@ -201,12 +201,12 @@ getmetadata(const char *fn)
 	struct metadata_t *meta = NULL;
 
 	if ((meta = malloc(sizeof(struct metadata_t))) == NULL) {
-		perror("malloc");
+		log(LOG_ERROR, "malloc: %s\n", strerror(errno));;
 		return NULL;
 	}
 
 	if ((f = fopen(fn, "r")) == NULL) {
-		perror(fn);
+		log(LOG_ERROR, "%s: %s\n", fn, strerror(errno));;
 		return NULL;
 	}
 
@@ -234,7 +234,7 @@ sendmetadata(struct client_t *c)
 	memset(&remote, 0, sizeof(remote));
 
 	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
-		perror(inet_ntoa(c->inet));
+		log(LOG_ERROR, "%s: %s\n", inet_ntoa(c->inet), strerror(errno));;
 		return -1;
 	}
 
@@ -265,7 +265,7 @@ serverloop(in_addr_t host, in_port_t port)
 	struct client_t *c = NULL;
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		perror("socket");
+		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
 		return -1;
 	}
 
@@ -275,18 +275,18 @@ serverloop(in_addr_t host, in_port_t port)
 	srv.sin_port          = htons(port);
 
 	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
-		perror("bind");
+		log(LOG_ERROR, "bind: %s\n", strerror(errno));;
 		return -1;
 	}
 
 	if (listen(sfd, CONNECTION_MAX) < 0) {
-		perror("listen");
+		log(LOG_ERROR, "listen: %s\n", strerror(errno));;
 		return -1;
 	}
 
 	len = sizeof(clt);
 	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-		perror("accept");
+		log(LOG_ERROR, "accept: %s\n", strerror(errno));;
 		return -1;
 	}
 
@@ -317,7 +317,7 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 	memset(&entry->peer, 0, sizeof(struct sockaddr_in));
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		perror("socket");
+		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
 		return NULL;
 	}
 
@@ -379,7 +379,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	ssize_t r, len = 0;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		perror("socket");
+		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
 		return -1;
 	}
 
@@ -388,14 +388,14 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 			break;
 
 		if (errno != ECONNREFUSED || i+1 >= RETRY) {
-			perror(inet_ntoa(clt->peer.sin_addr));
+			log(LOG_ERROR, "%s: %s\n", inet_ntoa(clt->peer.sin_addr), strerror(errno));;
 			return -1;
 		}
 		usleep(250000);
 	}
 
 	if (write(cfd, local, sizeof(struct metadata_t)) < 0) {
-		perror("write");
+		log(LOG_ERROR, "write: %s\n", strerror(errno));;
 		return -1;
 	}
 
@@ -403,7 +403,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	len = 0;
 	while (len < (ssize_t)sizeof(struct metadata_t)) {
 		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RECVSIZ)) < 0) {
-			perror("read");
+			log(LOG_ERROR, "read: %s\n", strerror(errno));;
 			return -1;
 		}
 		len += r;
@@ -481,7 +481,7 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	if (!fork()) {
 		log(LOG_VERBOSE, "%s\n", echo(cmd));
 		execvp(cmd[0], cmd);
-		perror(cmd[0]);
+		log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
 		return -1;
 	}
 	free(cmd);
@@ -541,7 +541,7 @@ spawnremote(struct peers_t *plist)
 		if (!fork()) {
 			log(LOG_VERBOSE, "%s\n", echo(cmd));
 			execvp(cmd[0], cmd);
-			perror(cmd[0]);
+			log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
 			return -1;
 		}
 	}
