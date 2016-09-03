@@ -533,7 +533,7 @@ spawnremote(struct peers_t *plist)
 	struct peer_t *tmp;
 
 	SLIST_FOREACH(tmp, plist, entries) {
-		snprintf(synk_cmd, _POSIX_ARG_MAX, "/usr/local/bin/synk -s -h %s",
+		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s",
 			inet_ntoa(tmp->peer.sin_addr));
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
