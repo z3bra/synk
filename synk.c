@@ -268,7 +268,7 @@ serverloop(in_addr_t host, in_port_t port)
 
 	memset(&srv, 0, sizeof(srv));
 	srv.sin_family        = AF_INET;
-	srv.sin_addr.s_addr   = htonl(host);
+	srv.sin_addr.s_addr   = host;
 	srv.sin_port          = htons(port);
 
 	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
