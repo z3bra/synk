@@ -90,7 +90,7 @@ int verbose = LOG_ERROR;
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-vs] [-p PORT] -h HOST [FILE..]\n", name),
+	fprintf(stderr, "usage: %s [-qvs] [-p PORT] -h HOST [FILE..]\n", name),
 	exit(1);
 }
 
@@ -566,6 +566,7 @@ main(int argc, char *argv[])
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
 	case 's': mode = SYNK_SERVER; break;
 	case 'v': verbose++; break;
+	case 'q': verbose = LOG_NONE; break;
 	}ARGEND;
 
 	if (hostname == NULL)
