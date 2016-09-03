@@ -58,7 +58,7 @@ enum {
 
 enum {
 	LOG_NONE = 0,
-	LOG_INFO = 1,
+	LOG_ERROR = 1,
 	LOG_VERBOSE = 2,
 	LOG_DEBUG = 3,
 };
@@ -85,7 +85,7 @@ int spawnremote(struct peers_t *);
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
 
-int verbose = LOG_NONE;
+int verbose = LOG_ERROR;
 
 void
 usage(char *name)
