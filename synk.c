@@ -205,14 +205,12 @@ getmetadata(const char *fn)
 		return NULL;
 	}
 
-	if ((f = fopen(fn, "r")) == NULL) {
-		log(LOG_ERROR, "%s: %s\n", fn, strerror(errno));;
-		return NULL;
-	}
-
 	memset(meta, 0, sizeof(struct metadata_t));
-	sha512(f, meta->hash);
 	snprintf(meta->path, PATH_MAX, "%s", fn);
+	if ((f = fopen(fn, "r")) == NULL)
+		return meta;
+
+	sha512(f, meta->hash);
 	meta->mtime = gettimestamp(meta->path);
 
 	fclose(f);
