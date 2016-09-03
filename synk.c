@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -25,6 +26,7 @@
 #define CONNECTION_MAX 1
 #define RECVSIZ        512
 #define TIMEOUT        5
+#define RETRY          8
 
 /* hold a socket connection, used to pass a connection to a thread */
 struct client_t {
@@ -373,7 +375,7 @@ uptodate(struct peers_t *plist)
 int
 getpeermeta(struct peer_t *clt, struct metadata_t *local)
 {
-	int cfd;
+	int i, cfd;
 	ssize_t r, len = 0;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -381,9 +383,15 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 		return -1;
 	}
 
-	if (connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)) < 0) {
-		perror(inet_ntoa(clt->peer.sin_addr));
-		return -1;
+	for (i=0; i<RETRY; i++) {
+		if (!connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)))
+			break;
+
+		if (errno != ECONNREFUSED || i+1 >= RETRY) {
+			perror(inet_ntoa(clt->peer.sin_addr));
+			return -1;
+		}
+		usleep(250000);
 	}
 
 	if (write(cfd, local, sizeof(struct metadata_t)) < 0) {
@@ -564,7 +572,6 @@ main(int argc, char *argv[])
 	case SYNK_CLIENT:
 		while ((fn = *(argv++)) != NULL) {
 			spawnremote(&plist);
-			sleep(1);
 			syncfile(&plist, fn);
 		}
 		break;
