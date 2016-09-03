@@ -478,7 +478,12 @@ dosync(struct peer_t *master, struct peer_t *slave)
 			master->host, echo(cmd), NULL });
 	}
 
-	puts(echo(cmd));
+	if (!fork()) {
+		log(LOG_VERBOSE, "%s\n", echo(cmd));
+		execvp(cmd[0], cmd);
+		perror(cmd[0]);
+		return -1;
+	}
 	free(cmd);
 
 	return 0;
@@ -534,7 +539,7 @@ spawnremote(struct peers_t *plist)
 			inet_ntoa(tmp->peer.sin_addr));
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
-			puts(echo(cmd));
+			log(LOG_VERBOSE, "%s\n", echo(cmd));
 			execvp(cmd[0], cmd);
 			perror(cmd[0]);
 			return -1;
