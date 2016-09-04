@@ -65,23 +65,23 @@ enum {
 };
 
 void usage(char *name);
-int sendmetadata(struct client_t *);
-int serverloop(in_addr_t, in_port_t);
-
 char *echo(char * []);
 char **concat(int, ...);
-struct in_addr *resolve(char *);
 
-struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
 long gettimestamp(const char *path);
-int getpeermeta(struct peer_t *, struct metadata_t *);
+struct in_addr *getinetaddr(char *);
+struct metadata_t *getmetadata(const char *);
+struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
 struct peer_t *freshestpeer(struct peers_t *);
-int syncfile(struct peers_t *, const char *);
-int uptodate(struct peers_t *);
+int getpeermeta(struct peer_t *, struct metadata_t *);
 int flushpeers(struct peers_t *);
-int syncwithmaster(struct peer_t *master, struct peers_t *plist);
-int dosync(struct peer_t *master, struct peer_t *slave);
 int spawnremote(struct peers_t *);
+int uptodate(struct peers_t *);
+int dosync(struct peer_t *master, struct peer_t *slave);
+int syncwithmaster(struct peer_t *master, struct peers_t *plist);
+int syncfile(struct peers_t *, const char *);
+int sendmetadata(struct client_t *);
+int waitclient(in_addr_t, in_port_t);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
@@ -158,40 +158,6 @@ concat(int n, ...)
 }
 
 /*
- * Put an hostname, get an in_addr!
- * This is intended to be consumed directly, as gethostbyname() might
- * return a pointer to a static buffer
- */
-struct in_addr *
-resolve(char *hostname)
-{
-	struct hostent *he;
-	
-	if (!(he = gethostbyname(hostname))) {
-		herror(hostname);
-		return NULL;
-	}
-	
-	return ((struct in_addr **)he->h_addr_list)[0];
-}
-
-/*
- * Returns the UNIX timestamp for the given file, or -1 in case stat(2)
- * is in error.
- */
-long
-gettimestamp(const char *path)
-{
-	struct stat sb;
-	if (stat(path, &sb) < 0) {
-		log(LOG_ERROR, "%s: %s\n", path, strerror(errno));;
-		return -1;
-	}
-
-	return sb.st_mtim.tv_sec;
-}
-
-/*
  * Retrieve metadata about a filename and store it in the given pointer.
  * The pointer must be already allocated
  */
@@ -219,85 +185,38 @@ getmetadata(const char *fn)
 	return meta;
 }
 
-
 /*
- * Read a path from a connected client, get the timestamp for this path and
- * send it back to the client. Close connection afterward.
+ * Returns the UNIX timestamp for the given file, or -1 in case stat(2)
+ * is in error.
  */
-int
-sendmetadata(struct client_t *c)
+long
+gettimestamp(const char *path)
 {
-	ssize_t len = 0;
-	struct metadata_t *local, remote;
-
-	memset(&remote, 0, sizeof(remote));
-
-	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
-		log(LOG_ERROR, "%s: %s\n", inet_ntoa(c->inet), strerror(errno));;
+	struct stat sb;
+	if (stat(path, &sb) < 0) {
+		log(LOG_ERROR, "%s: %s\n", path, strerror(errno));;
 		return -1;
 	}
 
-	local = getmetadata(remote.path);
-
-	/* .. and send it to the client */
-	write(c->fd, local, sizeof(struct metadata_t));
-	close(c->fd);
-
-	free(c);
-
-	return -1;
+	return sb.st_mtim.tv_sec;
 }
 
 /*
- * Server part: bind on given address/port and wait for a client connection.
- * Only one client is handled per server instance, and the server gets close
- * at the end.
+ * Put an hostname, get an in_addr!
+ * This is intended to be consumed directly, as gethostbyname() might
+ * return a pointer to a static buffer
  */
-int
-serverloop(in_addr_t host, in_port_t port)
+struct in_addr *
+getinetaddr(char *hostname)
 {
-	int sfd;
-	int cfd;
-	socklen_t len;
-	struct sockaddr_in clt;
-	struct sockaddr_in srv;
-	struct client_t *c = NULL;
+	struct hostent *he;
 
-	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
-		return -1;
+	if (!(he = gethostbyname(hostname))) {
+		herror(hostname);
+		return NULL;
 	}
 
-	memset(&srv, 0, sizeof(srv));
-	srv.sin_family        = AF_INET;
-	srv.sin_addr.s_addr   = host;
-	srv.sin_port          = htons(port);
-
-	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
-		log(LOG_ERROR, "bind: %s\n", strerror(errno));;
-		return -1;
-	}
-
-	if (listen(sfd, CONNECTION_MAX) < 0) {
-		log(LOG_ERROR, "listen: %s\n", strerror(errno));;
-		return -1;
-	}
-
-	len = sizeof(clt);
-	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-		log(LOG_ERROR, "accept: %s\n", strerror(errno));;
-		return -1;
-	}
-
-	alarm(0); /* cancel previously set SIGALRM */
-
-	c = malloc(sizeof(struct client_t));
-	c->fd = cfd;
-	c->inet = clt.sin_addr;
-
-	sendmetadata(c);
-
-	return close(sfd);
+	return ((struct in_addr **)he->h_addr_list)[0];
 }
 
 /*
@@ -321,7 +240,7 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 	}
 
 	strncpy(entry->host, hostname, HOST_NAME_MAX);
-	host = resolve(hostname);
+	host = getinetaddr(hostname);
 
 	entry->peer.sin_family        = AF_INET;
 	entry->peer.sin_addr.s_addr   = host->s_addr;
@@ -333,37 +252,24 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 }
 
 /*
- * Empty the linked-list containing all peers
+ * return a pointer to the peer having the highest timestamp.
+ * NULL is returned in case the local file is the most recent
  */
-int
-flushpeers(struct peers_t *plist)
+struct peer_t *
+freshestpeer(struct peers_t *plist)
 {
+	long ts = -1;
 	struct peer_t *tmp = NULL;
-	while (!SLIST_EMPTY(plist)) {
-		tmp = SLIST_FIRST(plist);
-		SLIST_REMOVE_HEAD(plist, entries);
-		free(tmp);
-	}
+	struct peer_t *freshest = NULL;
 
-	return 0;
-}
-
-/*
- * Check the synchronisation status between all peers. If at least 2 hashes
- * differ, it returns with a non-zero status.
- */
-int
-uptodate(struct peers_t *plist)
-{
-	struct peer_t *tmp, *ref;
-
-	ref = SLIST_FIRST(plist);
 	SLIST_FOREACH(tmp, plist, entries) {
-		if (!sha512_compare(ref->meta.hash, tmp->meta.hash))
-			return 0;
+		if (tmp->meta.mtime > ts) {
+			freshest = tmp;
+			ts = tmp->meta.mtime;
+		}
 	}
 
-	return 1;
+	return freshest;
 }
 
 /*
@@ -412,45 +318,149 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 }
 
 /*
- * return a pointer to the peer having the highest timestamp.
- * NULL is returned in case the local file is the most recent
+ * Empty the linked-list containing all peers
  */
-struct peer_t *
-freshestpeer(struct peers_t *plist)
+int
+flushpeers(struct peers_t *plist)
 {
-	long ts = -1;
 	struct peer_t *tmp = NULL;
-	struct peer_t *freshest = NULL;
-
-	SLIST_FOREACH(tmp, plist, entries) {
-		if (tmp->meta.mtime > ts) {
-			freshest = tmp;
-			ts = tmp->meta.mtime;
-		}
+	while (!SLIST_EMPTY(plist)) {
+		tmp = SLIST_FIRST(plist);
+		SLIST_REMOVE_HEAD(plist, entries);
+		free(tmp);
 	}
 
-	return freshest;
+	return 0;
 }
 
 /*
- * Logic to synchronize a remote peer with all the slaves if they differ
+ * Read a path from a connected client, get the timestamp for this path and
+ * send it back to the client. Close connection afterward.
  */
 int
-syncwithmaster(struct peer_t *master, struct peers_t *plist)
+sendmetadata(struct client_t *c)
 {
-	int ret = 0;
-	struct peer_t *slave = NULL;
-	SLIST_FOREACH(slave, plist, entries) {
-		if (slave == master)
-			continue;
-		if (!sha512_compare(master->meta.hash, slave->meta.hash))
-			continue;
+	ssize_t len = 0;
+	struct metadata_t *local, remote;
 
-		ret += dosync(master, slave);
+	memset(&remote, 0, sizeof(remote));
+
+	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
+		log(LOG_ERROR, "%s: %s\n", inet_ntoa(c->inet), strerror(errno));;
+		return -1;
 	}
-	return ret;
+
+	local = getmetadata(remote.path);
+
+	/* .. and send it to the client */
+	write(c->fd, local, sizeof(struct metadata_t));
+	close(c->fd);
+
+	free(c);
+
+	return -1;
 }
 
+/*
+ * Server part: bind on given address/port and wait for a client connection.
+ * Only one client is handled per server instance, and the server gets close
+ * at the end.
+ */
+int
+waitclient(in_addr_t host, in_port_t port)
+{
+	int sfd;
+	int cfd;
+	socklen_t len;
+	struct sockaddr_in clt;
+	struct sockaddr_in srv;
+	struct client_t *c = NULL;
+
+	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
+		return -1;
+	}
+
+	memset(&srv, 0, sizeof(srv));
+	srv.sin_family        = AF_INET;
+	srv.sin_addr.s_addr   = host;
+	srv.sin_port          = htons(port);
+
+	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
+		log(LOG_ERROR, "bind: %s\n", strerror(errno));;
+		return -1;
+	}
+
+	if (listen(sfd, CONNECTION_MAX) < 0) {
+		log(LOG_ERROR, "listen: %s\n", strerror(errno));;
+		return -1;
+	}
+
+	len = sizeof(clt);
+	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
+		log(LOG_ERROR, "accept: %s\n", strerror(errno));;
+		return -1;
+	}
+
+	alarm(0); /* cancel previously set SIGALRM */
+
+	c = malloc(sizeof(struct client_t));
+	c->fd = cfd;
+	c->inet = clt.sin_addr;
+
+	sendmetadata(c);
+
+	return close(sfd);
+}
+
+/*
+ * Connect via ssh to a remote and spawn an instance running in server-mode
+ */
+int
+spawnremote(struct peers_t *plist)
+{
+	char **cmd = NULL;
+	char synk_cmd[_POSIX_ARG_MAX];
+
+	struct peer_t *tmp;
+
+	SLIST_FOREACH(tmp, plist, entries) {
+		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s",
+			inet_ntoa(tmp->peer.sin_addr));
+		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
+		if (!fork()) {
+			log(LOG_VERBOSE, "%s\n", echo(cmd));
+			execvp(cmd[0], cmd);
+			log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Check the synchronisation status between all peers. If at least 2 hashes
+ * differ, it returns with a non-zero status.
+ */
+int
+uptodate(struct peers_t *plist)
+{
+	struct peer_t *tmp, *ref;
+
+	ref = SLIST_FIRST(plist);
+	SLIST_FOREACH(tmp, plist, entries) {
+		if (!sha512_compare(ref->meta.hash, tmp->meta.hash))
+			return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Given a master and a slave, create the appropriate rsync(1) command to
+ * get the slave in sync with the master, from localhost (this might involve
+ * using ssh to spawn the rsync process on a remote master)
+ */
 int
 dosync(struct peer_t *master, struct peer_t *slave)
 {
@@ -486,6 +496,25 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	free(cmd);
 
 	return 0;
+}
+
+/*
+ * Logic to synchronize a remote peer with all the slaves if they differ
+ */
+int
+syncwithmaster(struct peer_t *master, struct peers_t *plist)
+{
+	int ret = 0;
+	struct peer_t *slave = NULL;
+	SLIST_FOREACH(slave, plist, entries) {
+		if (slave == master)
+			continue;
+		if (!sha512_compare(master->meta.hash, slave->meta.hash))
+			continue;
+
+		ret += dosync(master, slave);
+	}
+	return ret;
 }
 
 /*
@@ -528,28 +557,6 @@ syncfile(struct peers_t *plist, const char *fn)
 }
 
 int
-spawnremote(struct peers_t *plist)
-{
-	char **cmd = NULL;
-	char synk_cmd[_POSIX_ARG_MAX];
-
-	struct peer_t *tmp;
-
-	SLIST_FOREACH(tmp, plist, entries) {
-		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s",
-			inet_ntoa(tmp->peer.sin_addr));
-		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
-		if (!fork()) {
-			log(LOG_VERBOSE, "%s\n", echo(cmd));
-			execvp(cmd[0], cmd);
-			log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
-			return -1;
-		}
-	}
-	return 0;
-}
-
-int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
@@ -567,9 +574,9 @@ main(int argc, char *argv[])
 			addpeer(&plist, hostname, port);
 		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
+	case 'q': verbose = LOG_NONE; break;
 	case 's': mode = SYNK_SERVER; break;
 	case 'v': verbose++; break;
-	case 'q': verbose = LOG_NONE; break;
 	}ARGEND;
 
 	if (hostname == NULL)
@@ -584,7 +591,7 @@ main(int argc, char *argv[])
 		break;
 	case SYNK_SERVER:
 		alarm(TIMEOUT);
-		serverloop(resolve(hostname)->s_addr, port);
+		waitclient(getinetaddr(hostname)->s_addr, port);
 		break;
 	}
 	return 0;
