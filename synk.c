@@ -269,6 +269,7 @@ freshestpeer(struct peers_t *plist)
 		}
 	}
 
+	log(LOG_VERBOSE, "latest: %s\n", freshest->host);
 	return freshest;
 }
 
@@ -429,7 +430,6 @@ spawnremote(struct peers_t *plist)
 			inet_ntoa(tmp->peer.sin_addr));
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
-			log(LOG_VERBOSE, "%s\n", echo(cmd));
 			execvp(cmd[0], cmd);
 			log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
 			return -1;
@@ -449,10 +449,13 @@ uptodate(struct peers_t *plist)
 
 	ref = SLIST_FIRST(plist);
 	SLIST_FOREACH(tmp, plist, entries) {
-		if (!sha512_compare(ref->meta.hash, tmp->meta.hash))
+		if (sha512_compare(ref->meta.hash, tmp->meta.hash)) {
+			log(LOG_VERBOSE, "%s: found SHA512 mismatch\n", ref->meta.path);
 			return 0;
+		}
 	}
 
+	log(LOG_VERBOSE, "%s: synked!\n", ref->meta.path);
 	return 1;
 }
 
@@ -488,7 +491,7 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	}
 
 	if (!fork()) {
-		log(LOG_VERBOSE, "%s\n", echo(cmd));
+		log(LOG_VERBOSE, "synk: %s\n", echo(cmd));
 		execvp(cmd[0], cmd);
 		log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
 		return -1;
@@ -534,9 +537,19 @@ syncfile(struct peers_t *plist, const char *fn)
 	if (!local)
 		return -1;
 
+	log(LOG_DEBUG, "localhost\t%s\t%.7s\t%lu\n",
+		local->path,
+		sha512_format(local->hash),
+		local->mtime);
+
 	SLIST_FOREACH(tmp, plist, entries) {
 		if (getpeermeta(tmp, local) != 0)
 			return -1;
+		log(LOG_DEBUG, "%s\t%s\t%.7s\t%lu\n",
+			tmp->host,
+			tmp->meta.path,
+			sha512_format(tmp->meta.hash),
+			tmp->meta.mtime);
 	}
 
 	addpeer(plist, "localhost", 0);
