@@ -3,82 +3,57 @@ synk
 
 Synchronize a bunch of files between different hosts.
 
-* active/passive replication
-* one-shot tool
-* uses timestamps for comparison
-* spawn rsync(1) processes
+* one-shot tool (no running daemon)
+* Compares sha512 to check synchronisation status
+* Last modification time used to elect a "master"
+* uses `rsync(1)` for fast copying between peers
 
-ideas
------
+The following requirements are needed in order for `synk(1)` to work
+between multiple peers:
 
-backend:
-
-* write() + read() ?
-* ssh + rsync
-* bittorrent (http://libbt.sourceforge.net)
-* tox (https://github.com/irungentoo/toxcore)
+* `synk` must be installed, and in the `$PATH` on each peer
+* peers must be able to interconnect via `ssh` (without a prompt)
 
 usage
 -----
 
-	# hostname
-	phobos.z3bra.org
+	$ synk -v -h keel.z3bra.org -h phobos.z3bra.org $HOME/file
+	peer: localhost /home/z3bra/file        c8e37eb 1473157623
+	peer: phobos.z3bra.org  /home/z3bra/file        6d4af03 1473157643
+	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
+	master: keel.z3bra.org
+	synk: rsync -azEq --delete keel.z3bra.org:/home/z3bra/file /home/z3bra/file
+	synk: ssh keel.z3bra.org rsync -azEq --delete /home/z3bra/file phobos.z3bra.org:/home/z3bra/file
 
-	# pg <<EOF > /etc/synk.conf
-	phobos.z3bra.org
-	apophis.z3bra.org
-	doom.z3bra.org
-	EOF
-
-	$ synk -v $HOME/file
-	localhost	/home/z3bra/file	43b5c67	146426324
-	phobos.z3bra.org	/home/z3bra/file	549fb41	1464274181
-	apophis.z3bra.org	/home/z3bra/file	34fc2ae	1464260388
-	doom.z3bra.org	/home/z3bra/file	df3738b	1464273098
-	LATEST:	phobos.z3bra.org
-	synk: rsync -azEq --delete phobos.z3bra.org:/home/z3bra/file apophis.z3bra.org:/home/z3bra/file
-	synk: rsync -azEq --delete phobos.z3bra.org:/home/z3bra/file doom.z3bra.org:/home/z3bra/file
-
-	$ synk -v $HOME/file
-	localhost	/home/z3bra/file	549fb41	1464274168
-	phobos.z3bra.org	/home/z3bra/file	549fb41	1464274181
-	apophis.z3bra.org	/home/z3bra/file	549fb41	1464275472
-	doom.z3bra.org	/home/z3bra/file	549fb41	1464275478
-	SYNKED: /home/z3bra/file
+	$ synk -v -h keel.z3bra.org -h phobos.z3bra.org $HOME/file
+	peer: localhost /home/z3bra/file        005f686 1473157705
+	peer: phobos.z3bra.org  /home/z3bra/file        005f686 1473157705
+	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
 
 how it works
 ------------
 
 Local client spawns server-mode instances to peers via ssh:
 
-	synk file
+	synk $FILE
 	 \_ ssh phobos.z3bra.org 'synk -s'
 	 \_ ssh apophis.z3bra.org 'synk -s'
 	 \_ ssh doom.z3bra.org 'synk -s'
 
-Client sends metadata for "file" to each peer, using this structure:
+Client sends metadata for `$FILE` to each peer, which includes the following:
 
-	struct metadata_t {
-		const char path[PATH_MAX];
-		unsigned char sha512[64];
-		long mtime;
-	};
+	* filename (as passed on the command line)
+	* sha512 digest for this file
+	* last modification fime
 
-Each peer will the recreate this structure locally, using metadata.path,
-and send it back to the client.
+Each peer will then recreate this structure locally, using the given path
+and send it back to the client, which will build a list of peer/metadata
+internally.
 
-The client then has a linked-list of its peers containing the peer info
-and associated metadata:
-
-	struct node_t {
-	        struct metadata_t meta;
-	        struct sockaddr_in peer;
-	        SLIST_ENTRY(node_t) entries;
-	};
-
-This list is then processed to figure out wether all peer.meta.hash
-match or not. In case a difference is found, the node.meta.mtime are
-evaluated to find the higher one (sort list by mtime?).
+This list is then processed to figure out wether all sha512 digests
+together match or not. In case a difference is found, the modification
+times are used to determine a "master", which will `rsync` it local file
+to all other peers (localhost included).
 
 In this case, we have two possibilities:
 
@@ -95,72 +70,9 @@ locally to update the file with peer that have a different hash:
 ### remote peer X is the most recent
 
 We need to spawn `rsync(1)` processes remotely on the host, to sync it
-with all the peers (except for localhost).
-Either we do the same as we do locally, but prepending each command with `ssh $PEER`:
+with all the peers (except for localhost):
 
 	synk file
 	 \_ rsync -azEq phobos.z3bra.org:file file
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file apophis.z3bra.org:file'
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file doom.z3bra.org:file'
-
-PROS:
-	* one process per peer
-	* only the calling process compare hashes
-CONS:
-	* many calls to `ssh`
-
----> Best solution
-
-Or, we simply run a new `synk` process on the peer, so that he figure
-out that he has to sync the other peers (we still need to use `rsync(1)`
-for localhost, as we're unable to guess our external address):
-
-	synk file
-	 \_ rsync -azEq phobos.z3bra.org:file file
-	 \_ ssh phobos.z3bra.org 'synk -h apophis.z3bra.org -h doom.z3bra.org file'
-
-Which would result, on the remote peer:
-
-	/usr/sbin/sshd
-	 \_ sshd: z3bra [priv]
-	     \_ sshd: z3bra@pts/0
-	         \_ synk -h apophis.z3bra.org -h doom.z3bra.org file
-	             \_ rsync -azEq file apophis.z3bra.org:file
-	             \_ rsync -azEq file doom.z3bra.org:file
-
-The only *real* issue with this solution is that the logic to discover the
-newest file will have to run twice, once on the initial calling process
-(locally), and once on the newest peer. This shouldn't be a huge issue,
-but it's still bothering to do the same thing twice.
-
-PROS:
-	* easier to implement
-CONS:
-	* double the number of inter connections
-	* loosing connection with one remote kills all updates
-
-implementation
---------------
-
-	struct peer_t = {
-		socket;
-		metadata;
-		struct peer_t *next;
-	};
-
-	int
-	main(int argc, int *argv[])
-	{
-		SLIST_HEAD(headpeer_t, peer_t) peerlist;
-		SLIST_INIT(&peerlist);
-		peerlist = getpeerinfos(filename);
-		if (!uptodate(filename, peerlist)) {
-			master = freshest(peerlist);
-			synk(master, NULL); /* synk localhost with master */
-			SLIST_FOREACH(peer_t, peerlist, tmp) {
-				if (tmp != master)
-					synk(master, tmp);
-			}
-		}
-		return 0;
-	}
