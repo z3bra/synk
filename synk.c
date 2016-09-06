@@ -269,7 +269,7 @@ freshestpeer(struct peers_t *plist)
 		}
 	}
 
-	log(LOG_VERBOSE, "latest: %s\n", freshest->host);
+	log(LOG_VERBOSE, "master: %s\n", freshest->host);
 	return freshest;
 }
 
@@ -450,7 +450,7 @@ uptodate(struct peers_t *plist)
 	ref = SLIST_FIRST(plist);
 	SLIST_FOREACH(tmp, plist, entries) {
 		if (sha512_compare(ref->meta.hash, tmp->meta.hash)) {
-			log(LOG_VERBOSE, "%s: found SHA512 mismatch\n", ref->meta.path);
+			log(LOG_DEBUG, "+ sha512 mismatch: %s / %s)\n", ref->host, tmp->host);
 			return 0;
 		}
 	}
@@ -537,15 +537,10 @@ syncfile(struct peers_t *plist, const char *fn)
 	if (!local)
 		return -1;
 
-	log(LOG_DEBUG, "localhost\t%s\t%.7s\t%lu\n",
-		local->path,
-		sha512_format(local->hash),
-		local->mtime);
-
 	SLIST_FOREACH(tmp, plist, entries) {
 		if (getpeermeta(tmp, local) != 0)
 			return -1;
-		log(LOG_DEBUG, "%s\t%s\t%.7s\t%lu\n",
+		log(LOG_VERBOSE, "peer: %s\t%s\t%.7s\t%lu\n",
 			tmp->host,
 			tmp->meta.path,
 			sha512_format(tmp->meta.hash),
@@ -555,6 +550,12 @@ syncfile(struct peers_t *plist, const char *fn)
 	addpeer(plist, "localhost", 0);
 	tmp = SLIST_FIRST(plist);
 	tmp->meta = *local;
+
+	log(LOG_VERBOSE, "peer: %s\t%s\t%.7s\t%lu\n",
+		tmp->host,
+		tmp->meta.path,
+		sha512_format(tmp->meta.hash),
+		tmp->meta.mtime);
 
 	if (!uptodate(plist)) {
 		master = freshestpeer(plist);
