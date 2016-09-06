@@ -93,7 +93,7 @@ int verbose = LOG_ERROR;
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-qvs] [-p PORT] -h HOST [FILE..]\n", name),
+	fprintf(stderr, "usage: %s [-qvs] [-f FILE] [-p PORT] -h HOST [FILE..]\n", name);
 	exit(1);
 }
 
@@ -609,6 +609,9 @@ main(int argc, char *argv[])
 	addpeer(&plist, "localhost", 0);
 
 	ARGBEGIN{
+	case 'f':
+		strncpy(config, EARGF(usage(argv0)), PATH_MAX);
+		break;
 	case 'h':
 		hostname = EARGF(usage(argv0));
 		if (mode == SYNK_CLIENT)
