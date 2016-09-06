@@ -537,25 +537,21 @@ syncfile(struct peers_t *plist, const char *fn)
 	if (!local)
 		return -1;
 
+	addpeer(plist, "localhost", 0);
 	SLIST_FOREACH(tmp, plist, entries) {
-		if (getpeermeta(tmp, local) != 0)
-			return -1;
+		if (IS_LOOPBACK(tmp)) {
+			memcpy(&tmp->meta, local, sizeof(struct metadata_t));
+		} else {
+			if (getpeermeta(tmp, local) != 0)
+				return -1;
+		}
+
 		log(LOG_VERBOSE, "peer: %s\t%s\t%.7s\t%lu\n",
 			tmp->host,
 			tmp->meta.path,
 			sha512_format(tmp->meta.hash),
 			tmp->meta.mtime);
 	}
-
-	addpeer(plist, "localhost", 0);
-	tmp = SLIST_FIRST(plist);
-	tmp->meta = *local;
-
-	log(LOG_VERBOSE, "peer: %s\t%s\t%.7s\t%lu\n",
-		tmp->host,
-		tmp->meta.path,
-		sha512_format(tmp->meta.hash),
-		tmp->meta.mtime);
 
 	if (!uptodate(plist)) {
 		master = freshestpeer(plist);
