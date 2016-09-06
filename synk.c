@@ -426,6 +426,8 @@ spawnremote(struct peers_t *plist)
 	struct peer_t *tmp;
 
 	SLIST_FOREACH(tmp, plist, entries) {
+		if (IS_LOOPBACK(tmp))
+			continue;
 		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s",
 			inet_ntoa(tmp->peer.sin_addr));
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
@@ -537,7 +539,6 @@ syncfile(struct peers_t *plist, const char *fn)
 	if (!local)
 		return -1;
 
-	addpeer(plist, "localhost", 0);
 	SLIST_FOREACH(tmp, plist, entries) {
 		if (IS_LOOPBACK(tmp)) {
 			memcpy(&tmp->meta, local, sizeof(struct metadata_t));
@@ -558,10 +559,9 @@ syncfile(struct peers_t *plist, const char *fn)
 		ret = syncwithmaster(master, plist);
 	}
 
-	flushpeers(plist);
 	free(local);
 
-	wait(NULL);
+	while (waitpid(-1, NULL, WNOHANG) > 0);
 
 	return ret;
 }
@@ -576,6 +576,7 @@ main(int argc, char *argv[])
 	struct peers_t plist;
 
 	SLIST_INIT(&plist);
+	addpeer(&plist, "localhost", 0);
 
 	ARGBEGIN{
 	case 'h':
@@ -598,6 +599,7 @@ main(int argc, char *argv[])
 			spawnremote(&plist);
 			syncfile(&plist, fn);
 		}
+		flushpeers(&plist);
 		break;
 	case SYNK_SERVER:
 		alarm(TIMEOUT);
