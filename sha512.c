@@ -288,14 +288,14 @@ sha512(FILE *stream, unsigned char *hash)
 {
 	sha512_state md;
 	size_t len = 0;
-	unsigned char buf[128];
+	unsigned char buf[127];
 
 	if (sha512_init(&md) != 0) {
 		perror("sha512_init");
 		return 1;
 	}
 
-	while ((len = fread(buf, 128, 1, stream)) > 0) {
+	while ((len = fread(buf, 127, 1, stream)) > 0) {
 		if (sha512_process(&md, buf, len) != 0) {
 			return 1;
 		}
