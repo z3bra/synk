@@ -457,7 +457,7 @@ uptodate(struct peers_t *plist)
 		}
 	}
 
-	log(LOG_VERBOSE, "%s: synked!\n", ref->meta.path);
+	log(LOG_DEBUG, "+ no difference found: %s\n", ref->meta.path);
 	return 1;
 }
 
