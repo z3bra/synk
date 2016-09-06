@@ -20,15 +20,14 @@
 #define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
 #define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
 
-#define SERVER_HOST    "127.0.0.1"
-#define SERVER_PORT    9723
-
-#define CONFIG_FILE    "/etc/synk.conf"
-#define TIMESTAMP_MAX  19 /* length of LONG_MAX */
-#define CONNECTION_MAX 1
-#define RECVSIZ        512
-#define TIMEOUT        5
-#define RETRY          8
+#define DEFADDR      "127.0.0.1"
+#define DEFPORT      9723
+#define SERVERTIMEO  5 /* in seconds */
+#define RCVBUFSZ     512
+#define UTSLEN       19
+#define MAXCONNECT   1
+#define MAXRETRY     8
+#define PATHCONFIG   "/etc/synk.conf"
 
 /* hold a socket connection, used to pass a connection to a thread */
 struct client_t {
@@ -291,11 +290,11 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 		return -1;
 	}
 
-	for (i=0; i<RETRY; i++) {
+	for (i=0; i<MAXRETRY; i++) {
 		if (!connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)))
 			break;
 
-		if (errno != ECONNREFUSED || i+1 >= RETRY) {
+		if (errno != ECONNREFUSED || i+1 >= MAXRETRY) {
 			log(LOG_ERROR, "%s: %s\n", inet_ntoa(clt->peer.sin_addr), strerror(errno));;
 			return -1;
 		}
@@ -310,7 +309,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	/* ... which should return the metadata for this file */
 	len = 0;
 	while (len < (ssize_t)sizeof(struct metadata_t)) {
-		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RECVSIZ)) < 0) {
+		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RCVBUFSZ)) < 0) {
 			log(LOG_ERROR, "read: %s\n", strerror(errno));;
 			return -1;
 		}
@@ -421,7 +420,7 @@ waitclient(in_addr_t host, in_port_t port)
 		return -1;
 	}
 
-	if (listen(sfd, CONNECTION_MAX) < 0) {
+	if (listen(sfd, MAXCONNECT) < 0) {
 		log(LOG_ERROR, "listen: %s\n", strerror(errno));;
 		return -1;
 	}
@@ -599,9 +598,9 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
-	char config[PATH_MAX] = CONFIG_FILE;
+	char config[PATH_MAX] = PATHCONFIG;
 	char *hostname = NULL;
-	in_port_t port = SERVER_PORT;
+	in_port_t port = DEFPORT;
 	uint8_t mode = SYNK_CLIENT;
 	struct peers_t plist;
 
@@ -635,7 +634,7 @@ main(int argc, char *argv[])
 		flushpeers(&plist);
 		break;
 	case SYNK_SERVER:
-		alarm(TIMEOUT);
+		alarm(SERVERTIMEO);
 		waitclient(getinetaddr(hostname)->s_addr, port);
 		break;
 	}
