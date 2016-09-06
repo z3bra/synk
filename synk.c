@@ -23,6 +23,7 @@
 #define SERVER_HOST    "127.0.0.1"
 #define SERVER_PORT    9723
 
+#define CONFIG_FILE    "/etc/synk.conf"
 #define TIMESTAMP_MAX  19 /* length of LONG_MAX */
 #define CONNECTION_MAX 1
 #define RECVSIZ        512
@@ -74,6 +75,7 @@ struct metadata_t *getmetadata(const char *);
 struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
 struct peer_t *freshestpeer(struct peers_t *);
 int getpeermeta(struct peer_t *, struct metadata_t *);
+int loadpeers(struct peers_t *, const char *);
 int flushpeers(struct peers_t *);
 int spawnremote(struct peers_t *);
 int uptodate(struct peers_t *);
@@ -316,6 +318,33 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	}
 
 	return close(cfd);
+}
+
+/*
+ * Load peers from a file
+ */
+int
+loadpeers(struct peers_t *plist, const char *fn)
+{
+	char host[HOST_NAME_MAX], *lf;
+	FILE *f = NULL;
+
+	f = fopen(fn, "r");
+	if (!f) {
+		perror(fn);
+		return -1;
+	}
+
+	while (fgets(host, HOST_NAME_MAX, f)) {
+		if ((lf = strchr(host, '\n')) != NULL)
+			*lf = '\0';
+
+		log(LOG_VERBOSE, "config: %s\n", host);
+		addpeer(plist, host, SERVER_PORT);
+	}
+
+	fclose(f);
+	return 0;
 }
 
 /*
@@ -570,6 +599,7 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
+	char config[PATH_MAX] = CONFIG_FILE;
 	char *hostname = NULL;
 	in_port_t port = SERVER_PORT;
 	uint8_t mode = SYNK_CLIENT;
@@ -591,7 +621,7 @@ main(int argc, char *argv[])
 	}ARGEND;
 
 	if (hostname == NULL)
-		usage(argv0);
+		loadpeers(&plist, config);
 
 	switch(mode) {
 	case SYNK_CLIENT:
