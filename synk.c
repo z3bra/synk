@@ -191,18 +191,12 @@ getinetaddr(char *hostname)
 struct peer_t *
 addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 {
-	int cfd = 0;
 	struct peer_t *entry = NULL;
 	struct in_addr *host;
 
 	entry = malloc(sizeof(struct peer_t));
 	memset(&entry->meta, 0, sizeof(struct metadata_t));
 	memset(&entry->peer, 0, sizeof(struct sockaddr_in));
-
-	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		perror("socket");
-		return NULL;
-	}
 
 	strncpy(entry->host, hostname, HOST_NAME_MAX);
 	host = getinetaddr(hostname);
@@ -212,6 +206,8 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 	entry->peer.sin_port          = htons(port);
 
 	SLIST_INSERT_HEAD(plist, entry, entries);
+
+	log(LOG_DEBUG, "+ peer %s:%d\n", entry->host, ntohs(entry->peer.sin_port));
 
 	return entry;
 }
@@ -542,7 +538,6 @@ main(int argc, char *argv[])
 	struct peers_t plist;
 
 	SLIST_INIT(&plist);
-	addpeer(&plist, "localhost", 0);
 
 	ARGBEGIN{
 	case 'f':
@@ -558,9 +553,12 @@ main(int argc, char *argv[])
 	case 'v': verbose++; break;
 	}ARGEND;
 
-	if (hostname == NULL)
+	if (SLIST_EMPTY(&plist)) {
+		log(LOG_DEBUG, "+ using config %s\n", config);
 		parseconf(&plist, config);
+	}
 
+	addpeer(&plist, "localhost", DEFPORT);
 	switch(mode) {
 	case SYNK_CLIENT:
 		while ((fn = *(argv++)) != NULL) {
