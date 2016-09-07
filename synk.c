@@ -59,9 +59,8 @@ enum {
 
 enum {
 	LOG_NONE = 0,
-	LOG_ERROR = 1,
-	LOG_VERBOSE = 2,
-	LOG_DEBUG = 3,
+	LOG_VERBOSE = 1,
+	LOG_DEBUG = 2,
 };
 
 void usage(char *name);
@@ -86,12 +85,12 @@ int waitclient(in_addr_t, in_port_t);
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
 
-int verbose = LOG_ERROR;
+int verbose = LOG_NONE;
 
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-qvs] [-p PORT] -h HOST [FILE..]\n", name),
+	fprintf(stderr, "usage: %s [-vs] [-p PORT] -h HOST [FILE..]\n", name),
 	exit(1);
 }
 
@@ -143,7 +142,7 @@ concat(int n, ...)
 
 		tmp = realloc(cat, (len + i) * sizeof(char *));
 		if (!tmp) {
-			log(LOG_ERROR, "realloc: %s\n", strerror(errno));;
+			perror("realloc");
 			free(cat);
 			va_end(args);
 			return NULL;
@@ -168,7 +167,7 @@ getmetadata(const char *fn)
 	struct metadata_t *meta = NULL;
 
 	if ((meta = malloc(sizeof(struct metadata_t))) == NULL) {
-		log(LOG_ERROR, "malloc: %s\n", strerror(errno));;
+		perror("malloc");
 		return NULL;
 	}
 
@@ -194,7 +193,7 @@ gettimestamp(const char *path)
 {
 	struct stat sb;
 	if (stat(path, &sb) < 0) {
-		log(LOG_ERROR, "%s: %s\n", path, strerror(errno));;
+		fprintf(stderr, "stat: %s: %s\n", path, strerror(errno));;
 		return -1;
 	}
 
@@ -235,7 +234,7 @@ addpeer(struct peers_t *plist, char *hostname, in_port_t port)
 	memset(&entry->peer, 0, sizeof(struct sockaddr_in));
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
+		perror("socket");
 		return NULL;
 	}
 
@@ -285,7 +284,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	ssize_t r, len = 0;
 
 	if ((cfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
+		perror("socket");
 		return -1;
 	}
 
@@ -294,14 +293,14 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 			break;
 
 		if (errno != ECONNREFUSED || i+1 >= RETRY) {
-			log(LOG_ERROR, "%s: %s\n", inet_ntoa(clt->peer.sin_addr), strerror(errno));;
+			fprintf(stderr, "%s: %s\n", inet_ntoa(clt->peer.sin_addr), strerror(errno));;
 			return -1;
 		}
 		usleep(250000);
 	}
 
 	if (write(cfd, local, sizeof(struct metadata_t)) < 0) {
-		log(LOG_ERROR, "write: %s\n", strerror(errno));;
+		perror("write");
 		return -1;
 	}
 
@@ -309,7 +308,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	len = 0;
 	while (len < (ssize_t)sizeof(struct metadata_t)) {
 		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RECVSIZ)) < 0) {
-			log(LOG_ERROR, "read: %s\n", strerror(errno));;
+			perror("read");
 			return -1;
 		}
 		len += r;
@@ -347,7 +346,7 @@ sendmetadata(struct client_t *c)
 	memset(&remote, 0, sizeof(remote));
 
 	if ((len = read(c->fd, &remote, sizeof(remote))) < 0) {
-		log(LOG_ERROR, "%s: %s\n", inet_ntoa(c->inet), strerror(errno));;
+		fprintf(stderr, "%s: %s\n", inet_ntoa(c->inet), strerror(errno));;
 		return -1;
 	}
 
@@ -378,7 +377,7 @@ waitclient(in_addr_t host, in_port_t port)
 	struct client_t *c = NULL;
 
 	if ((sfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-		log(LOG_ERROR, "socket: %s\n", strerror(errno));;
+		perror("socket");
 		return -1;
 	}
 
@@ -388,18 +387,18 @@ waitclient(in_addr_t host, in_port_t port)
 	srv.sin_port          = htons(port);
 
 	if (bind(sfd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {
-		log(LOG_ERROR, "bind: %s\n", strerror(errno));;
+		perror("bind");
 		return -1;
 	}
 
 	if (listen(sfd, CONNECTION_MAX) < 0) {
-		log(LOG_ERROR, "listen: %s\n", strerror(errno));;
+		perror("listen");
 		return -1;
 	}
 
 	len = sizeof(clt);
 	if ((cfd = accept(sfd, (struct sockaddr *)&clt, &len)) < 0) {
-		log(LOG_ERROR, "accept: %s\n", strerror(errno));;
+		perror("accept");
 		return -1;
 	}
 
@@ -433,7 +432,7 @@ spawnremote(struct peers_t *plist)
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
 			execvp(cmd[0], cmd);
-			log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
+			fprintf(stderr, "execvp: %s: %s\n", cmd[0], strerror(errno));;
 			return -1;
 		}
 	}
@@ -495,7 +494,7 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	if (!fork()) {
 		log(LOG_VERBOSE, "synk: %s\n", echo(cmd));
 		execvp(cmd[0], cmd);
-		log(LOG_ERROR, "%s: %s\n", cmd[0], strerror(errno));;
+		fprintf(stderr, "execvp: %s: %s\n", cmd[0], strerror(errno));;
 		return -1;
 	}
 	free(cmd);
@@ -585,7 +584,6 @@ main(int argc, char *argv[])
 			addpeer(&plist, hostname, port);
 		break;
 	case 'p': port = atoi(EARGF(usage(argv0))); break;
-	case 'q': verbose = LOG_NONE; break;
 	case 's': mode = SYNK_SERVER; break;
 	case 'v': verbose++; break;
 	}ARGEND;
