@@ -1,13 +1,16 @@
 <config.mk
 
-synk: synk.o sha512.o
+synk: y.tab.o synk.o sha512.o
 	$LD -o $target $prereq $LDFLAGS $LIBS
 
-%.o: %.c
+%.o: %.c synk.h
 	$CC $CFLAGS -c $stem.c -o $stem.o
 
+y.tab.c: parse.y
+	$YACC $prereq
+
 clean:V:
-	rm -f *.o synk
+	rm -f *.o synk y.tab.c
 
 install:V: all
 	mkdir -p ${DESTDIR}${PREFIX}/bin

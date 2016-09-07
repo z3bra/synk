@@ -2,6 +2,7 @@ VERSION = 0.0
 
 CC = cc
 LD = ${CC}
+YACC = yacc
 
 PREFIX = /usr/local
 MANDIR = ${PREFIX}/man

@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,8 +6,6 @@
 #include <string.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -16,40 +13,10 @@
 
 #include "arg.h"
 #include "sha512.h"
+#include "synk.h"
 
 #define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
 #define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
-
-#define SERVER_HOST    "127.0.0.1"
-#define SERVER_PORT    9723
-
-#define TIMESTAMP_MAX  19 /* length of LONG_MAX */
-#define CONNECTION_MAX 1
-#define RECVSIZ        512
-#define TIMEOUT        5
-#define RETRY          8
-
-/* hold a socket connection, used to pass a connection to a thread */
-struct client_t {
-        int fd;
-        struct in_addr inet;
-};
-
-/* metadata informations about a file, to decide about the synkro state */
-struct metadata_t {
-	char path[PATH_MAX];
-	unsigned char hash[64];
-	long mtime;
-};
-
-/* singly-linked list for all the nodes that should be in synk */
-struct peer_t {
-	char host[HOST_NAME_MAX];
-	struct metadata_t meta;
-	struct sockaddr_in peer;
-	SLIST_ENTRY(peer_t) entries;
-};
-SLIST_HEAD(peers_t, peer_t);
 
 /* different operationnal mode for TCP connection */
 enum {
@@ -63,24 +30,23 @@ enum {
 	LOG_DEBUG = 2,
 };
 
-void usage(char *name);
-char *echo(char * []);
-char **concat(int, ...);
+static void usage(char *name);
+static char *echo(char * []);
+static char **concat(int, ...);
 
-long gettimestamp(const char *path);
-struct in_addr *getinetaddr(char *);
-struct metadata_t *getmetadata(const char *);
-struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
-struct peer_t *freshestpeer(struct peers_t *);
-int getpeermeta(struct peer_t *, struct metadata_t *);
-int flushpeers(struct peers_t *);
-int spawnremote(struct peers_t *);
-int uptodate(struct peers_t *);
-int dosync(struct peer_t *master, struct peer_t *slave);
-int syncwithmaster(struct peer_t *master, struct peers_t *plist);
-int syncfile(struct peers_t *, const char *);
-int sendmetadata(struct client_t *);
-int waitclient(in_addr_t, in_port_t);
+static long gettimestamp(const char *path);
+static struct in_addr *getinetaddr(char *);
+static struct metadata_t *getmetadata(const char *);
+static struct peer_t *freshestpeer(struct peers_t *);
+static int getpeermeta(struct peer_t *, struct metadata_t *);
+static int flushpeers(struct peers_t *);
+static int spawnremote(struct peers_t *);
+static int uptodate(struct peers_t *);
+static int dosync(struct peer_t *master, struct peer_t *slave);
+static int syncwithmaster(struct peer_t *master, struct peers_t *plist);
+static int syncfile(struct peers_t *, const char *);
+static int sendmetadata(struct client_t *);
+static int waitclient(in_addr_t, in_port_t);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
@@ -90,7 +56,7 @@ int verbose = LOG_NONE;
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-vs] [-p PORT] -h HOST [FILE..]\n", name),
+	fprintf(stderr, "usage: %s [-vs] [-f FILE] [-p PORT] -h HOST [FILE..]\n", name);
 	exit(1);
 }
 
@@ -288,11 +254,11 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 		return -1;
 	}
 
-	for (i=0; i<RETRY; i++) {
+	for (i=0; i<MAXRETRY; i++) {
 		if (!connect(cfd, (struct sockaddr *) &(clt->peer), sizeof(clt->peer)))
 			break;
 
-		if (errno != ECONNREFUSED || i+1 >= RETRY) {
+		if (errno != ECONNREFUSED || i+1 >= MAXRETRY) {
 			fprintf(stderr, "%s: %s\n", inet_ntoa(clt->peer.sin_addr), strerror(errno));;
 			return -1;
 		}
@@ -307,7 +273,7 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 	/* ... which should return the metadata for this file */
 	len = 0;
 	while (len < (ssize_t)sizeof(struct metadata_t)) {
-		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RECVSIZ)) < 0) {
+		if ((r = read(cfd, (unsigned char *)&(clt->meta) + len, RCVBUFSZ)) < 0) {
 			perror("read");
 			return -1;
 		}
@@ -391,7 +357,7 @@ waitclient(in_addr_t host, in_port_t port)
 		return -1;
 	}
 
-	if (listen(sfd, CONNECTION_MAX) < 0) {
+	if (listen(sfd, MAXCONNECT) < 0) {
 		perror("listen");
 		return -1;
 	}
@@ -569,8 +535,9 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
+	char config[PATH_MAX] = PATHCONFIG;
 	char *hostname = NULL;
-	in_port_t port = SERVER_PORT;
+	in_port_t port = DEFPORT;
 	uint8_t mode = SYNK_CLIENT;
 	struct peers_t plist;
 
@@ -578,6 +545,9 @@ main(int argc, char *argv[])
 	addpeer(&plist, "localhost", 0);
 
 	ARGBEGIN{
+	case 'f':
+		strncpy(config, EARGF(usage(argv0)), PATH_MAX);
+		break;
 	case 'h':
 		hostname = EARGF(usage(argv0));
 		if (mode == SYNK_CLIENT)
@@ -589,7 +559,7 @@ main(int argc, char *argv[])
 	}ARGEND;
 
 	if (hostname == NULL)
-		usage(argv0);
+		parseconf(&plist, config);
 
 	switch(mode) {
 	case SYNK_CLIENT:
@@ -600,7 +570,7 @@ main(int argc, char *argv[])
 		flushpeers(&plist);
 		break;
 	case SYNK_SERVER:
-		alarm(TIMEOUT);
+		alarm(SERVERTIMEO);
 		waitclient(getinetaddr(hostname)->s_addr, port);
 		break;
 	}
