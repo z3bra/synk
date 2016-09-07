@@ -274,33 +274,6 @@ getpeermeta(struct peer_t *clt, struct metadata_t *local)
 }
 
 /*
- * Load peers from a file
- */
-int
-loadpeers(struct peers_t *plist, const char *fn)
-{
-	char host[HOST_NAME_MAX], *lf;
-	FILE *f = NULL;
-
-	f = fopen(fn, "r");
-	if (!f) {
-		perror(fn);
-		return -1;
-	}
-
-	while (fgets(host, HOST_NAME_MAX, f)) {
-		if ((lf = strchr(host, '\n')) != NULL)
-			*lf = '\0';
-
-		log(LOG_VERBOSE, "config: %s\n", host);
-		addpeer(plist, host, SERVER_PORT);
-	}
-
-	fclose(f);
-	return 0;
-}
-
-/*
  * Empty the linked-list containing all peers
  */
 int
@@ -577,7 +550,7 @@ main(int argc, char *argv[])
 	}ARGEND;
 
 	if (hostname == NULL)
-		loadpeers(&plist, config);
+		parseconf(&plist, config);
 
 	switch(mode) {
 	case SYNK_CLIENT:
