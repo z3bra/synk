@@ -3,7 +3,7 @@
 synk: synk.o sha512.o
 	$LD -o $target $prereq $LDFLAGS $LIBS
 
-%.o: %.c
+%.o: %.c synk.h
 	$CC $CFLAGS -c $stem.c -o $stem.o
 
 clean:V:

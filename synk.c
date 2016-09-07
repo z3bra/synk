@@ -16,73 +16,27 @@
 
 #include "arg.h"
 #include "sha512.h"
+#include "synk.h"
 
 #define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
-#define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
 
-#define DEFADDR      "127.0.0.1"
-#define DEFPORT      9723
-#define SERVERTIMEO  5 /* in seconds */
-#define RCVBUFSZ     512
-#define UTSLEN       19
-#define MAXCONNECT   1
-#define MAXRETRY     8
-#define PATHCONFIG   "/etc/synk.conf"
+static void usage(char *name);
+static char *echo(char * []);
+static char **concat(int, ...);
 
-/* hold a socket connection, used to pass a connection to a thread */
-struct client_t {
-        int fd;
-        struct in_addr inet;
-};
-
-/* metadata informations about a file, to decide about the synkro state */
-struct metadata_t {
-	char path[PATH_MAX];
-	unsigned char hash[64];
-	long mtime;
-};
-
-/* singly-linked list for all the nodes that should be in synk */
-struct peer_t {
-	char host[HOST_NAME_MAX];
-	struct metadata_t meta;
-	struct sockaddr_in peer;
-	SLIST_ENTRY(peer_t) entries;
-};
-SLIST_HEAD(peers_t, peer_t);
-
-/* different operationnal mode for TCP connection */
-enum {
-	SYNK_CLIENT,
-	SYNK_SERVER
-};
-
-enum {
-	LOG_NONE = 0,
-	LOG_ERROR = 1,
-	LOG_VERBOSE = 2,
-	LOG_DEBUG = 3,
-};
-
-void usage(char *name);
-char *echo(char * []);
-char **concat(int, ...);
-
-long gettimestamp(const char *path);
-struct in_addr *getinetaddr(char *);
-struct metadata_t *getmetadata(const char *);
-struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
-struct peer_t *freshestpeer(struct peers_t *);
-int getpeermeta(struct peer_t *, struct metadata_t *);
-int loadpeers(struct peers_t *, const char *);
-int flushpeers(struct peers_t *);
-int spawnremote(struct peers_t *);
-int uptodate(struct peers_t *);
-int dosync(struct peer_t *master, struct peer_t *slave);
-int syncwithmaster(struct peer_t *master, struct peers_t *plist);
-int syncfile(struct peers_t *, const char *);
-int sendmetadata(struct client_t *);
-int waitclient(in_addr_t, in_port_t);
+static long gettimestamp(const char *path);
+static struct in_addr *getinetaddr(char *);
+static struct metadata_t *getmetadata(const char *);
+static struct peer_t *freshestpeer(struct peers_t *);
+static int getpeermeta(struct peer_t *, struct metadata_t *);
+static int flushpeers(struct peers_t *);
+static int spawnremote(struct peers_t *);
+static int uptodate(struct peers_t *);
+static int dosync(struct peer_t *master, struct peer_t *slave);
+static int syncwithmaster(struct peer_t *master, struct peers_t *plist);
+static int syncfile(struct peers_t *, const char *);
+static int sendmetadata(struct client_t *);
+static int waitclient(in_addr_t, in_port_t);
 
 const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
 const char *ssh_cmd[] = { "ssh", NULL };
