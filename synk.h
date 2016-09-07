@@ -1,9 +1,6 @@
 #include <arpa/inet.h>
 #include <sys/queue.h>
-#include <sys/socket.h>
 #include <limits.h>
-
-#define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
 
 #define DEFADDR      "127.0.0.1"
 #define DEFPORT      9723
@@ -35,19 +32,6 @@ struct peer_t {
 	SLIST_ENTRY(peer_t) entries;
 };
 SLIST_HEAD(peers_t, peer_t);
-
-/* different operationnal mode for TCP connection */
-enum {
-	SYNK_CLIENT,
-	SYNK_SERVER
-};
-
-enum {
-	LOG_NONE = 0,
-	LOG_ERROR = 1,
-	LOG_VERBOSE = 2,
-	LOG_DEBUG = 3,
-};
 
 struct peer_t *addpeer(struct peers_t *, char *, in_port_t);
 int parseconf(struct peers_t *, const char *);

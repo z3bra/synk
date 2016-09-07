@@ -19,8 +19,6 @@
  */
 
 %{
-#include <sys/stat.h>
-
 #include <errno.h>
 #include <ctype.h>
 #include <stdarg.h>
@@ -99,7 +97,7 @@ yyerror(const char *fmt, ...)
 	if (vsnprintf(buf, sizeof(buf), fmt, ap) < 0)
 		perror("vsnprintf");
 	va_end(ap);
-	printf("%s:%d: %s", file->name, yylval.lineno, buf);
+	fprintf(stderr, "%s:%d: %s\n", file->name, yylval.lineno, buf);
 	return 0;
 }
 
@@ -377,16 +375,10 @@ popfile(void)
 int
 parseconf(struct peers_t *plist, const char *filename)
 {
-	struct stat sb;
 	int errors = 0;
 
-	if (stat(filename, &sb) == 0 && sb.st_mode & 007) {
-		printf("%s: shouldn't be readable by others", filename);
-		return -1;
-	}
-
 	if (!(file = pushfile(filename))) {
-		printf("failed to open %s", filename);
+		fprintf(stderr, "failed to open %s\n", filename);
 		return -1;
 	}
 	topfile = file;

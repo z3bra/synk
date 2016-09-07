@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,8 +6,6 @@
 #include <string.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -19,6 +16,20 @@
 #include "synk.h"
 
 #define IS_LOOPBACK(p)	((p)->peer.sin_addr.s_addr == htonl(INADDR_LOOPBACK))
+#define log(l,...) if(verbose>=l){printf(__VA_ARGS__);}
+
+/* different operationnal mode for TCP connection */
+enum {
+	SYNK_CLIENT,
+	SYNK_SERVER
+};
+
+enum {
+	LOG_NONE = 0,
+	LOG_ERROR = 1,
+	LOG_VERBOSE = 2,
+	LOG_DEBUG = 3,
+};
 
 static void usage(char *name);
 static char *echo(char * []);
