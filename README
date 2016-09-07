@@ -17,7 +17,11 @@ between multiple peers:
 usage
 -----
 
-	$ synk -v -h keel.z3bra.org -h phobos.z3bra.org $HOME/file
+	$ cat /etc/synk.conf
+	peer keel.z3bra.org
+	peer phobos.z3bra.org
+
+	$ synk -v $HOME/file
 	peer: localhost /home/z3bra/file        c8e37eb 1473157623
 	peer: phobos.z3bra.org  /home/z3bra/file        6d4af03 1473157643
 	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
@@ -25,10 +29,21 @@ usage
 	synk: rsync -azEq --delete keel.z3bra.org:/home/z3bra/file /home/z3bra/file
 	synk: ssh keel.z3bra.org rsync -azEq --delete /home/z3bra/file phobos.z3bra.org:/home/z3bra/file
 
-	$ synk -v -h keel.z3bra.org -h phobos.z3bra.org $HOME/file
+	$ synk -v $HOME/file
 	peer: localhost /home/z3bra/file        005f686 1473157705
 	peer: phobos.z3bra.org  /home/z3bra/file        005f686 1473157705
 	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
+
+syntax
+------
+
+The configuration file (default: /etc/synk.conf) contain the peers
+definition, one per line, in the following format:
+
+	peer <host> [port]
+
+If no port is specified, the default value (9723) will be used. Hosts
+can be specified either by their fqdn, or ip address.
 
 how it works
 ------------
