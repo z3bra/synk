@@ -389,8 +389,9 @@ spawnremote(struct peers_t *plist)
 	SLIST_FOREACH(tmp, plist, entries) {
 		if (IS_LOOPBACK(tmp))
 			continue;
-		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s",
-			inet_ntoa(tmp->peer.sin_addr));
+		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s -p %d",
+			inet_ntoa(tmp->peer.sin_addr),
+			ntohs(tmp->peer.sin_port));
 		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
 			execvp(cmd[0], cmd);
