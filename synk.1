@@ -1,0 +1,107 @@
+.Dd 2016-09-08
+.Dt SYNK 1
+.Os POSIX.1-2008
+.Sh NAME
+.Nm synk
+.Nd synchronize files between multiple hosts
+.Sh SYNOPSIS
+.Nm
+.Op Fl sv
+.Op Fl f Ar file
+.Op Fl p Ar port
+.Op Fl h Ar host
+.Ar file..
+.Sh DESCRIPTION
+.Nm
+will connect to the given peers, retrieve the sha512 / mtime of
+.Ar file
+on each host and, if the hashes differ at some point,
+.Xr rsync 1
+the most recent version from the host (master) to all other peers. In
+case the master is not localhost,
+.Xr ssh 1
+will be used to spawn a remote
+.Xr rsync 1
+command between the master and each slave (except for localhost as it's not needed).
+.Pp
+When
+.Nm
+starts up, it reads the peer list from a configuration file, typically
+.Xr synk.conf 5 ,
+unless peers are specified on the command line.
+.Bl -tag -width "-f file"
+.It Fl s
+Enable server-mode. This will make
+.Nm
+listen for incomming connections on the address given by
+.Ar host and port .
+This is used internally by
+.Nm
+and should never be called by the user.
+.It Fl v
+Increase verbosity. There are two levels of logging, as follow:
+.Bl -enum -compact
+.It
+print out informations about peers and files (VERBOSE)
+.It
+detail all actions taken (DEBUG)
+.El
+The logging level can be increased by passing the verbose flag (-v) again.
+Each level includes the messages of the previous ones.
+.Nm
+will log informative messages to stderr.
+.It Fl f Ar file
+Have
+.Nm
+use
+.Ar file
+as the configuration file, instead of the default
+.Pa /etc/synk.conf .
+.It Fl p Ar port
+Have the next peer listen on
+.Ar port
+for incoming connections, and connect to it via this port as well.
+.It Fl h Ar host
+Add
+.Ar host
+to the list of peers to synchronize. Using this flag will prevent
+.Nm
+from parsing
+.Xr synk.conf 5 .
+.Ar file
+with. Peers are added as they are parsed on the command line, which
+means that you can have different
+.Ar host
+listen on different
+.Ar port
+by calling the
+.Fl p
+flag before each
+.Fl f
+flag (see
+.Sx EXAMPLES
+for use cases).
+.El
+.Sh FILES
+.Bl -tag -width "/etc/synk.confXXX" -compact
+.It Pa /etc/synk.conf
+default
+.Nm
+configuration file
+.El
+.Sh EXAMPLES
+Synchronize a file between all peers listed in
+.Pa /etc/synk.conf :
+
+.Dl synk /etc/hosts
+.Pp
+Synchronize a file with two peers, using different ports for each:
+
+.Dl synk -p 1234 -h 172.16.0.100 -p 5678 -h 172.16.0.101 $HOME/.profile
+.Ed
+.Sh SEE ALSO
+.Xr synk.conf 5 ,
+.Xr rsync 1 ,
+.Xr ssh 1
+.Sh AUTHORS
+.An Willy Goiffon Aq Mt willy@mailoo.org
