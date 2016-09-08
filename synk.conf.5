@@ -1,0 +1,49 @@
+.Dd 2016-09-08
+.Dt SYNK.CONF 5
+.Os POSIX.1-2008
+.Sh NAME
+.Nm synk.conf
+.Nd synk file synchronisation tool configuration file
+.Sh DESCRIPTION
+The
+.Xr synk 1
+utility will check the synchronization state of a file between peers defined in the
+.Nm configuration file.
+
+The peers definitions have the following format:
+.Bd -ragged -offset indent
+.Ic peer
+.Ar hostname
+.Op Ar port
+Peers definition consist of the following parts:
+.Bl -tag -width 11n
+.It Ic peer
+Keyword specifying we are defining a peer
+.It Ar hostname
+The hostname or IP address of the peer we want to connect to. This hostname
+MUST be resolvable by all peers.
+.It Op Ar port
+The port to open on the peer to exchange file metadata. The default is 9723.
+.Pp
+Comments can be put anywhere in the file using a hash mark
+.Pq Sq # ,
+and extend to the end of the current line.
+.Sh EXAMPLES
+The following example will declare 3 peers:
+.Bd -literal -offset indent
+# peers definition for use with synk(1)
+peer alpha.lan
+peer beta.lan
+
+# use port 9724 as default is already in use
+peer gamma.lan 9724
+
+# John FFS, add these shit to the DNS!
+peer 192.168.200.113
+peer 192.168.200.114
+peer 192.168.200.115
+.Ed
+.Sh SEE ALSO
+.Xr synk 1
+.Sh AUTHORS
+.An Willy Goiffon Aq Mt willy@mailoo.org
