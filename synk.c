@@ -56,7 +56,7 @@ int verbose = LOG_NONE;
 void
 usage(char *name)
 {
-	fprintf(stderr, "usage: %s [-vs] [-f FILE] [-p PORT] -h HOST [FILE..]\n", name);
+	fprintf(stderr, "usage: %s [-vs] [-f FILE] [-p PORT] [-h HOST] [FILE..]\n", name);
 	exit(1);
 }
 
