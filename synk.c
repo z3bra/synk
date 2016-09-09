@@ -302,6 +302,7 @@ flushpeers(struct peers_t *plist)
 int
 sendmetadata(struct client_t *c)
 {
+	char buf;
 	ssize_t len = 0;
 	struct metadata_t *local, remote;
 
@@ -316,8 +317,9 @@ sendmetadata(struct client_t *c)
 
 	/* .. and send it to the client */
 	write(c->fd, local, sizeof(struct metadata_t));
-	close(c->fd);
 
+	while (recv(c->fd, &buf, 1, MSG_PEEK) > 0);
+	close(c->fd);
 	free(c);
 
 	return -1;
