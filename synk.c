@@ -554,14 +554,14 @@ main(int argc, char *argv[])
 	case 'v': verbose++; break;
 	}ARGEND;
 
-	if (SLIST_EMPTY(&plist)) {
-		log(LOG_DEBUG, "+ using config %s\n", config);
-		parseconf(&plist, config);
-	}
-
-	addpeer(&plist, "localhost", DEFPORT);
 	switch(mode) {
 	case SYNK_CLIENT:
+		if (SLIST_EMPTY(&plist)) {
+			log(LOG_DEBUG, "+ using config %s\n", config);
+			parseconf(&plist, config);
+		}
+
+		addpeer(&plist, "localhost", DEFPORT);
 		while ((fn = *(argv++)) != NULL) {
 			spawnremote(&plist);
 			syncfile(&plist, fn);
