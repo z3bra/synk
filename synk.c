@@ -138,7 +138,7 @@ getmetadata(const char *fn)
 	}
 
 	memset(meta, 0, sizeof(struct metadata_t));
-	snprintf(meta->path, PATH_MAX, "%s", fn);
+	snprintf(meta->path, _POSIX_PATH_MAX, "%s", fn);
 	if ((f = fopen(fn, "r")) == NULL)
 		return meta;
 
@@ -532,7 +532,7 @@ int
 main(int argc, char *argv[])
 {
 	char *argv0, *fn;
-	char config[PATH_MAX] = PATHCONFIG;
+	char config[_POSIX_PATH_MAX] = PATHCONFIG;
 	char *hostname = NULL;
 	in_port_t port = DEFPORT;
 	uint8_t mode = SYNK_CLIENT;
@@ -542,7 +542,7 @@ main(int argc, char *argv[])
 
 	ARGBEGIN{
 	case 'f':
-		strncpy(config, EARGF(usage(argv0)), PATH_MAX);
+		strncpy(config, EARGF(usage(argv0)), _POSIX_PATH_MAX);
 		break;
 	case 'h':
 		hostname = EARGF(usage(argv0));

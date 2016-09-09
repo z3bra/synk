@@ -19,7 +19,7 @@ struct client_t {
 
 /* metadata informations about a file, to decide about the synkro state */
 struct metadata_t {
-	char path[PATH_MAX];
+	char path[_POSIX_PATH_MAX];
 	unsigned char hash[64];
 	long mtime;
 };
