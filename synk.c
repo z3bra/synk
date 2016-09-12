@@ -97,7 +97,7 @@ concat(int n, ...)
 	char **p, **tmp, **cat = { NULL };
 
 	va_start(args, n);
-	while (n --> 0)	{
+	while (n --> 0) {
 		p = va_arg(args, char * []);
 
 		/* count args in the given array */
