@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <sys/queue.h>
+
 #include <limits.h>
 
 #define DEFADDR      "127.0.0.1"

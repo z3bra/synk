@@ -1,3 +1,8 @@
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -6,10 +11,6 @@
 #include <string.h>
 #include <netdb.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include "arg.h"
 #include "sha512.h"
