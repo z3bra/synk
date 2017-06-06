@@ -49,8 +49,8 @@ static int syncfile(struct peers_t *, const char *);
 static int sendmetadata(struct client_t *);
 static int waitclient(in_addr_t, in_port_t);
 
-const char *rsync_cmd[] = { "rsync", "-azEq", "--delete", NULL };
-const char *ssh_cmd[] = { "ssh", NULL };
+const char *rsynccmd[] = { "rsync", "-azEq", "--delete", NULL };
+const char *sshcmd[] = { "ssh", NULL };
 
 int verbose = LOG_NONE;
 
@@ -395,7 +395,7 @@ spawnremote(struct peers_t *plist)
 		snprintf(synk_cmd, _POSIX_ARG_MAX, "synk -s -h %s -p %d",
 			inet_ntoa(tmp->peer.sin_addr),
 			ntohs(tmp->peer.sin_port));
-		cmd = concat(2, ssh_cmd, (char *[]){ tmp->host, synk_cmd, NULL });
+		cmd = concat(2, sshcmd, (char *[]){ tmp->host, synk_cmd, NULL });
 		if (!fork()) {
 			execvp(cmd[0], cmd);
 			fprintf(stderr, "execvp: %s: %s\n", cmd[0], strerror(errno));;
@@ -450,10 +450,10 @@ dosync(struct peer_t *master, struct peer_t *slave)
 	args[0] = source;
 	args[1] = destination;
 
-	cmd = concat(2, rsync_cmd, args);
+	cmd = concat(2, rsynccmd, args);
 
 	if (!IS_LOOPBACK(master) && !IS_LOOPBACK(slave)) {
-		cmd = concat(2, ssh_cmd, (char *[]){
+		cmd = concat(2, sshcmd, (char *[]){
 			master->host, echo(cmd), NULL });
 	}
 
