@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/queue.h>
 
 #include <limits.h>
