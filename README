@@ -1,52 +1,42 @@
 synk
 ====
 
-Synchronize a bunch of files between different hosts.
+Synchronize files between multiple hosts.
 
 * one-shot tool (no running daemon)
 * Compares sha512 to check synchronisation status
 * Last modification time used to elect a "master"
 * uses `rsync(1)` for fast copying between peers
 
+Installation
+------------
+Run these commands to build and install `synk` on your system:
+
+	$ make
+	# make install
+
+Usage
+-----
 The following requirements are needed in order for `synk(1)` to work
 between multiple peers:
 
 * `synk` must be installed, and in the `$PATH` on each peer
 * peers must be able to interconnect via `ssh` (without a prompt)
 
-usage
------
+For more information on how this program works, check the synk(1) and
+synk.conf(5) manpages. As a quick reference, here is an example usage:
 
-	$ cat /etc/synk.conf
-	peer keel.z3bra.org
-	peer phobos.z3bra.org
-
-	$ synk -v $HOME/file
+	# Output "peer: HOSTNAME PATH SHA512 MTIME"
+	$ synk -v $HOME/file -h keel.z3bra.org -h orbb.z3bra.org
 	peer: localhost /home/z3bra/file        c8e37eb 1473157623
-	peer: phobos.z3bra.org  /home/z3bra/file        6d4af03 1473157643
+	peer: orbb.z3bra.org    /home/z3bra/file        6d4af03 1473157643
 	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
 	master: keel.z3bra.org
 	synk: rsync -azEq --delete keel.z3bra.org:/home/z3bra/file /home/z3bra/file
 	synk: ssh keel.z3bra.org rsync -azEq --delete /home/z3bra/file phobos.z3bra.org:/home/z3bra/file
 
-	$ synk -v $HOME/file
-	peer: localhost /home/z3bra/file        005f686 1473157705
-	peer: phobos.z3bra.org  /home/z3bra/file        005f686 1473157705
-	peer: keel.z3bra.org    /home/z3bra/file        005f686 1473157705
-
-syntax
-------
-
-The configuration file (default: /etc/synk.conf) contain the peers
-definition, one per line, in the following format:
-
-	peer <host> [port]
-
-If no port is specified, the default value (9723) will be used. Hosts
-can be specified either by their fqdn, or ip address.
-
-how it works
-------------
+Internal logic
+--------------
 
 Local client spawns server-mode instances to peers via ssh:
 
@@ -91,3 +81,8 @@ with all the peers (except for localhost):
 	 \_ rsync -azEq phobos.z3bra.org:file file
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file apophis.z3bra.org:file'
 	 \_ ssh phobos.z3bra.org 'rsync -azEq file doom.z3bra.org:file'
+
+License
+-------
+ISC License. See LICENSE file for copyright and license details.
+
